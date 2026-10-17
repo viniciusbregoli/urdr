@@ -1,0 +1,49 @@
+"""Urdr engine: one subcommand per job, progress as JSON lines on stdout."""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+
+def emit(event: str, **fields) -> None:
+    print(json.dumps({"event": event, **fields}), flush=True)
+
+
+def separate(audio: Path, out: Path) -> None:
+    import torch
+    from demucs.api import Separator, save_audio
+
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+
+    def on_segment(info: dict) -> None:
+        # Fires per segment; segment_offset and audio_length are both in samples.
+        if info["state"] == "end":
+            emit("progress", stage="separate", fraction=min(info["segment_offset"] / info["audio_length"], 1.0))
+
+    separator = Separator(model="htdemucs", device=device, callback=on_segment)
+    _, stems = separator.separate_audio_file(audio)
+    out.mkdir(parents=True, exist_ok=True)
+    for name, wav in stems.items():
+        save_audio(wav, out / f"{name}.wav", samplerate=separator.samplerate)
+    emit("done", stems=sorted(stems))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="urdr-engine")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sep = sub.add_parser("separate")
+    sep.add_argument("audio", type=Path)
+    sep.add_argument("out", type=Path)
+    args = parser.parse_args()
+    try:
+        if args.command == "separate":
+            separate(args.audio, args.out)
+    except Exception as exc:  # the app shows this message; the traceback goes to stderr
+        emit("error", message=str(exc))
+        raise
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
