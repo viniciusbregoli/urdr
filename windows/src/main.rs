@@ -48,7 +48,9 @@ fn main() -> eframe::Result {
             visuals.window_fill = widgets::RAISED;
             visuals.extreme_bg_color = widgets::PANEL;
             visuals.override_text_color = Some(widgets::TEXT);
-            visuals.selection.bg_fill = egui::Color32::from_white_alpha(40);
+            visuals.selection.bg_fill = widgets::white(40);
+            // Panel separators are the toolbar and transport hairlines.
+            visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0_f32, widgets::hairline());
             cc.egui_ctx.set_visuals(visuals);
             Ok(Box::new(app::App::new()))
         }),

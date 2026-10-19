@@ -4,8 +4,8 @@ use crate::score::{Measure, Score};
 use crate::widgets::*;
 use eframe::egui::{self, Align, Align2, Color32, Id, Layout, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, UiBuilder, Vec2};
 
-const HEADER_W: f32 = 236.0;
-const CHORD_H: f32 = 46.0;
+const HEADER_W: f32 = 248.0;
+const CHORD_H: f32 = 40.0;
 const GAP: f32 = 6.0;
 
 impl eframe::App for App {
@@ -15,17 +15,17 @@ impl eframe::App for App {
         let mut actions = vec![];
 
         egui::TopBottomPanel::top("top")
-            .exact_height(60.0)
-            .frame(egui::Frame::new().fill(GROUND).inner_margin(egui::Margin::symmetric(18, 0)))
+            .exact_height(56.0)
+            .frame(egui::Frame::new().fill(GROUND).inner_margin(egui::Margin::symmetric(20, 0)))
             .show(ctx, |ui| self.top_bar(ui, &mut actions));
         if self.ready() {
             egui::TopBottomPanel::bottom("transport")
-                .exact_height(92.0)
-                .frame(egui::Frame::new().fill(PANEL).inner_margin(egui::Margin::symmetric(18, 0)))
+                .exact_height(84.0)
+                .frame(egui::Frame::new().fill(PANEL).inner_margin(egui::Margin::symmetric(20, 0)))
                 .show(ctx, |ui| self.transport(ui, &mut actions));
         }
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(GROUND).inner_margin(egui::Margin { left: 18, right: 18, top: 4, bottom: 14 }))
+            .frame(egui::Frame::new().fill(GROUND).inner_margin(egui::Margin { left: 16, right: 16, top: 8, bottom: 12 }))
             .show(ctx, |ui| match &self.status {
                 Status::Ready => {
                     self.banner(ui);
@@ -53,15 +53,17 @@ impl eframe::App for App {
 }
 
 impl App {
+    // Title and BPM leading, the Mixer/Tab switch in the centre, open, palette and shortcuts trailing.
     fn top_bar(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
+        let rect = ui.max_rect();
         ui.horizontal_centered(|ui| {
-            ui.label(egui::RichText::new("Urdr").font(bold(20.0)).color(TEXT));
-            ui.add_space(14.0);
-            if let Some(title) = &self.title {
-                ui.label(egui::RichText::new(title).font(font(15.0)).color(SECONDARY));
+            ui.label(egui::RichText::new(self.title.as_deref().unwrap_or("Urdr")).font(bold(15.0)).color(TEXT));
+            if let Some(a) = self.tab.analysis.as_ref().filter(|_| self.ready()) {
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new(format!("{} BPM", a.bpm.round())).font(mono(12.0)).color(SECONDARY));
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if pill(ui, "?", "", self.help).clicked() {
+                if pill(ui, "Shortcuts", "?", self.help).clicked() {
                     actions.push(Action::Help);
                 }
                 if pill(ui, "Commands", "Ctrl+K", false).clicked() {
@@ -73,36 +75,39 @@ impl App {
                 if pill(ui, "Open audio", "O", false).clicked() {
                     actions.push(Action::OpenAudio);
                 }
-                if self.ready() {
-                    ui.add_space(24.0);
-                    let (r, _) = ui.allocate_exact_size(Vec2::new(chip_width(ui, "V"), 32.0), Sense::hover());
-                    chip(ui, r.left_center(), "V");
-                    if pill(ui, "Tab", "", self.view == View::Tab).clicked() && self.view != View::Tab {
-                        actions.push(Action::SwitchView);
-                    }
-                    if pill(ui, "Mixer", "", self.view == View::Mixer).clicked() && self.view != View::Mixer {
-                        actions.push(Action::SwitchView);
-                    }
-                }
             });
         });
+        if self.ready() {
+            let switch = Rect::from_center_size(rect.center(), Vec2::new(176.0, 30.0));
+            ui.scope_builder(UiBuilder::new().max_rect(switch).layout(Layout::left_to_right(Align::Center)), |ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                if pill(ui, "Mixer", "", self.view == View::Mixer).clicked() && self.view != View::Mixer {
+                    actions.push(Action::SwitchView);
+                }
+                if pill(ui, "Tab", "", self.view == View::Tab).clicked() && self.view != View::Tab {
+                    actions.push(Action::SwitchView);
+                }
+                let (r, _) = ui.allocate_exact_size(Vec2::new(chip_width(ui, "V"), 30.0), Sense::hover());
+                chip(ui, r.left_center(), "V");
+            });
+        }
     }
 
     fn banner(&mut self, ui: &mut Ui) {
         let mut lines = vec![];
         if self.analyzing {
-            lines.push("Finding chords and beats...".to_string());
+            lines.push(("Finding chords and beats...".to_string(), SECONDARY));
         } else if let Some(e) = &self.analysis_error {
-            lines.push(format!("No chords: {e}."));
+            lines.push((format!("No chords: {e}."), FAILURE));
         }
         if let Some(e) = &self.audio_error {
-            lines.push(format!("Audio output unavailable ({e}); playback runs silently."));
+            lines.push((format!("Audio output unavailable ({e}); playback runs silently."), SECONDARY));
         }
         if let Some(n) = &self.notice {
-            lines.push(n.clone());
+            lines.push((n.clone(), SECONDARY));
         }
-        for line in lines {
-            ui.label(egui::RichText::new(line).font(font(13.0)).color(SECONDARY));
+        for (line, color) in lines {
+            ui.label(egui::RichText::new(line).font(font(13.0)).color(color));
         }
         ui.add_space(4.0);
     }
@@ -121,7 +126,7 @@ impl App {
                 Status::Failed(message) => {
                     ui.label(egui::RichText::new("Could not open the song").font(bold(20.0)).color(TEXT));
                     ui.add_space(8.0);
-                    ui.add(egui::Label::new(egui::RichText::new(message).font(font(14.0)).color(SECONDARY)).wrap());
+                    ui.add(egui::Label::new(egui::RichText::new(message).font(font(14.0)).color(FAILURE)).wrap());
                 }
                 _ => {
                     ui.label(egui::RichText::new("Open a song to start practising").font(bold(22.0)).color(TEXT));
@@ -136,11 +141,12 @@ impl App {
         });
     }
 
+    // Lanes share the height above a chord lane that closes the stack; one x scale for everything time-based.
     fn mixer(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
         let area = ui.available_rect_before_wrap();
         let mut p = self.player.lock().unwrap();
         let count = p.stems.len().max(1) as f32;
-        let lane_h = ((area.height() - CHORD_H - GAP * count) / count).clamp(44.0, 128.0);
+        let lane_h = ((area.height() - CHORD_H - GAP * count) / count).clamp(52.0, 128.0);
         let x0 = area.left() + HEADER_W + GAP;
         let x1 = area.right();
         let duration = p.duration().max(0.001);
@@ -149,73 +155,48 @@ impl App {
         let position = p.position();
         let painter = ui.painter().clone();
 
-        // Chord lane on the same timeline as the stems.
-        let chord_row = Rect::from_min_max(area.min, Pos2::new(x1, area.top() + CHORD_H));
-        let chord_head = Rect::from_min_max(chord_row.min, Pos2::new(area.left() + HEADER_W, chord_row.bottom()));
-        painter.rect_filled(chord_head, 10.0, PANEL);
-        painter.text(chord_head.left_center() + Vec2::new(14.0, 0.0), Align2::LEFT_CENTER, "Chords", bold(14.0), TEXT);
-        if let Some(a) = &self.tab.analysis {
-            painter.text(chord_head.right_center() - Vec2::new(14.0, 0.0), Align2::RIGHT_CENTER, format!("{} BPM", a.bpm.round()), font(13.0), SECONDARY);
-        }
-        let chord_lane = Rect::from_min_max(Pos2::new(x0, chord_row.top()), chord_row.max);
-        painter.rect_filled(chord_lane, 10.0, PANEL);
-        if let Some(a) = &self.tab.analysis {
-            let current = a.chord_index(position);
-            let lane = painter.with_clip_rect(chord_lane.shrink(2.0));
-            for (i, chord) in a.chords.iter().enumerate().filter(|(_, c)| c.label != "N") {
-                let r = Rect::from_min_max(Pos2::new(x_of(chord.start) + 1.0, chord_lane.top() + 6.0), Pos2::new(x_of(chord.end) - 1.0, chord_lane.bottom() - 14.0));
-                let now = current == Some(i);
-                lane.rect_filled(r, 5.0, if now { white(36) } else { RAISED });
-                lane.with_clip_rect(r.intersect(chord_lane)).text(r.left_center() + Vec2::new(6.0, 0.0), Align2::LEFT_CENTER, chord.name(), bold(13.0), if now { TEXT } else { SECONDARY });
-            }
-            let downbeats: Vec<f64> = a.downbeats.clone();
-            for &b in &a.beats {
-                let strong = downbeats.contains(&b);
-                let x = x_of(b);
-                let h = if strong { 8.0 } else { 4.0 };
-                lane.line_segment([Pos2::new(x, chord_lane.bottom() - 3.0 - h), Pos2::new(x, chord_lane.bottom() - 3.0)], Stroke::new(1.0_f32, white(if strong { 70 } else { 30 })));
-            }
-        } else {
-            painter.text(chord_lane.left_center() + Vec2::new(12.0, 0.0), Align2::LEFT_CENTER, if self.analyzing { "Finding chords..." } else { "No chord analysis" }, font(13.0), SECONDARY);
-        }
-
-        // Stem lanes.
         let gains = crate::audio::gains(&p.stems);
-        let mut y = chord_row.bottom() + GAP;
+        let mut y = area.top();
         let mut volume_changes = vec![];
         for (i, stem) in p.stems.iter().enumerate() {
-            let color = stem_color(&stem.name);
+            let hue = stem_color(&stem.name);
+            let audible = gains[i] > 0.0;
             let head = Rect::from_min_size(Pos2::new(area.left(), y), Vec2::new(HEADER_W, lane_h));
-            painter.rect_filled(head, 10.0, PANEL);
+            let lane = Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x1, y + lane_h));
+            for r in [head, lane] {
+                painter.rect_filled(r, 12.0, PANEL);
+                if stem.solo {
+                    painter.rect_filled(r, 12.0, hue.gamma_multiply(0.12));
+                    painter.rect_stroke(r, 12.0, Stroke::new(1.0_f32, hue), StrokeKind::Inside);
+                }
+            }
             let icon = Rect::from_min_size(head.min + Vec2::new(12.0, 10.0), Vec2::splat(30.0));
-            stem_icon(ui, icon, &stem.name);
+            stem_icon(ui, icon, &stem.name, audible);
             let mut name = stem.name.clone();
             if let Some(first) = name.get_mut(0..1) {
                 first.make_ascii_uppercase();
             }
-            painter.text(Pos2::new(icon.right() + 10.0, icon.center().y), Align2::LEFT_CENTER, &name, bold(14.0), TEXT);
+            painter.text(Pos2::new(icon.right() + 10.0, icon.center().y), Align2::LEFT_CENTER, &name, bold(14.0), if audible { TEXT } else { SECONDARY });
             let name_w = text_width(ui, &name, bold(14.0));
             chip(ui, Pos2::new(icon.right() + 18.0 + name_w, icon.center().y), &(i + 1).to_string());
-            let m = Rect::from_min_size(Pos2::new(head.right() - 70.0, icon.top() + 2.0), Vec2::splat(26.0));
-            let s = m.translate(Vec2::new(32.0, 0.0));
+            let m = Rect::from_min_size(Pos2::new(head.right() - 66.0, icon.center().y - 11.0), Vec2::new(24.0, 22.0));
+            let s = m.translate(Vec2::new(30.0, 0.0));
             let (mf, mc) = if stem.muted { (WHITE, Color32::BLACK) } else { (RAISED, SECONDARY) };
-            if square(ui, m, Id::new(("mute", i)), "M", mf, mc).clicked() {
+            if square(ui, m, Id::new(("mute", i)), "M", mf, mc, 6.0).clicked() {
                 actions.push(Action::Mute(i));
             }
-            let (sf, sc) = if stem.solo { (color, Color32::BLACK) } else { (RAISED, SECONDARY) };
-            if square(ui, s, Id::new(("solo", i)), "S", sf, sc).clicked() {
+            let (sf, sc) = if stem.solo { (hue, Color32::BLACK) } else { (RAISED, SECONDARY) };
+            if square(ui, s, Id::new(("solo", i)), "S", sf, sc, 6.0).clicked() {
                 actions.push(Action::Solo(i));
             }
             if lane_h >= 70.0 {
                 let slider = Rect::from_min_max(Pos2::new(head.left() + 14.0, head.bottom() - 26.0), Pos2::new(head.right() - 16.0, head.bottom() - 10.0));
-                if let Some(v) = volume_slider(ui, slider, Id::new(("volume", i)), stem.volume, color) {
+                let level = if audible { hue } else { SECONDARY.gamma_multiply(0.6) };
+                if let Some(v) = volume_slider(ui, slider, Id::new(("volume", i)), stem.volume, level) {
                     volume_changes.push((i, v));
                 }
             }
 
-            let lane = Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x1, y + lane_h));
-            painter.rect_filled(lane, 10.0, PANEL);
-            let audible = gains[i] > 0.0;
             let mid = lane.center().y;
             let half = lane_h / 2.0 - 8.0;
             let mut x = lane.left() + 4.0;
@@ -226,12 +207,14 @@ impl App {
                 let peak = stem.peaks[from.min(stem.peaks.len() - 1)..to].iter().copied().fold(0.0, f32::max);
                 let h = (peak.sqrt() * half).max(1.0);
                 let played = t_of(x) <= position;
+                // Full when played, 38 % ahead of the playhead, and dim for a lane that cannot be heard.
                 let alpha = match (audible, played) {
-                    (false, _) => 0.18,
+                    (false, true) => 0.3,
+                    (false, false) => 0.14,
                     (true, true) => 1.0,
-                    (true, false) => 0.55,
+                    (true, false) => 0.38,
                 };
-                painter.rect_filled(Rect::from_min_max(Pos2::new(x, mid - h), Pos2::new(x + 2.0, mid + h)), 1.0, color.gamma_multiply(alpha));
+                painter.rect_filled(Rect::from_min_max(Pos2::new(x, mid - h), Pos2::new(x + 2.0, mid + h)), 1.0, hue.gamma_multiply(alpha));
                 x += 3.0;
             }
             y += lane_h + GAP;
@@ -240,8 +223,34 @@ impl App {
             p.stems[i].volume = v;
         }
 
-        // One loop region and playhead across the chord lane and every stem lane; click seeks, drag sets the loop.
-        let timeline = Rect::from_min_max(Pos2::new(x0, chord_row.top()), Pos2::new(x1, y - GAP));
+        // Chord lane on the same timeline as the stems.
+        let chord_head = Rect::from_min_size(Pos2::new(area.left(), y), Vec2::new(HEADER_W, CHORD_H));
+        painter.rect_filled(chord_head, 12.0, PANEL);
+        painter.text(chord_head.left_center() + Vec2::new(14.0, 0.0), Align2::LEFT_CENTER, "Chords", bold(14.0), TEXT);
+        let chord_lane = Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x1, y + CHORD_H));
+        painter.rect_filled(chord_lane, 12.0, PANEL);
+        if let Some(a) = &self.tab.analysis {
+            let current = a.chord_index(position);
+            let lane = painter.with_clip_rect(chord_lane.shrink(2.0));
+            for (i, chord) in a.chords.iter().enumerate().filter(|(_, c)| c.label != "N") {
+                let r = Rect::from_min_max(Pos2::new(x_of(chord.start) + 1.0, chord_lane.top() + 5.0), Pos2::new(x_of(chord.end) - 1.0, chord_lane.bottom() - 13.0));
+                let now = current == Some(i);
+                lane.rect_filled(r, 6.0, if now { WHITE } else { RAISED });
+                lane.with_clip_rect(r.intersect(chord_lane)).text(r.left_center() + Vec2::new(6.0, 0.0), Align2::LEFT_CENTER, chord.name(), bold(13.0), if now { Color32::BLACK } else { SECONDARY });
+            }
+            for &b in &a.beats {
+                let strong = a.downbeats.contains(&b);
+                let x = x_of(b);
+                let h = if strong { 7.0 } else { 3.0 };
+                lane.line_segment([Pos2::new(x, chord_lane.bottom() - 3.0 - h), Pos2::new(x, chord_lane.bottom() - 3.0)], Stroke::new(1.0_f32, white(if strong { 70 } else { 30 })));
+            }
+        } else {
+            painter.text(chord_lane.left_center() + Vec2::new(12.0, 0.0), Align2::LEFT_CENTER, if self.analyzing { "Finding chords..." } else { "No chord analysis" }, font(13.0), SECONDARY);
+        }
+        let bottom = chord_lane.bottom();
+
+        // One loop region and playhead across every stem lane and the chord lane; click seeks, drag sets the loop.
+        let timeline = Rect::from_min_max(Pos2::new(x0, area.top()), Pos2::new(x1, bottom));
         let response = ui.interact(timeline, Id::new("timeline"), Sense::click_and_drag());
         if response.drag_started() {
             self.drag_from = response.interact_pointer_pos().map(|pos| t_of(pos.x));
@@ -272,18 +281,19 @@ impl App {
             let (a, b) = (a.min(b), a.max(b));
             let r = Rect::from_min_max(Pos2::new(x_of(a), timeline.top()), Pos2::new(x_of(b), timeline.bottom()));
             let on = p.loop_on || live.is_some();
-            painter.rect_filled(r, 0.0, white(if on { 23 } else { 10 }));
-            let edge = Stroke::new(1.5_f32, white(if on { 115 } else { 50 }));
+            painter.rect_filled(r, 0.0, MINT.gamma_multiply(if on { 0.14 } else { 0.06 }));
+            let edge = Stroke::new(1.5_f32, MINT.gamma_multiply(if on { 0.7 } else { 0.3 }));
             painter.line_segment([r.left_top(), r.left_bottom()], edge);
             painter.line_segment([r.right_top(), r.right_bottom()], edge);
         }
-        let px = x_of(position);
-        painter.line_segment([Pos2::new(px, timeline.top()), Pos2::new(px, timeline.bottom())], Stroke::new(1.5_f32, WHITE));
-        painter.circle_filled(Pos2::new(px, timeline.top() + 1.0), 4.0, WHITE);
+        // 2 pt mint line with a 10 pt knob, both inside the lane bounds.
+        let px = x_of(position).clamp(timeline.left() + 5.0, timeline.right() - 5.0);
+        painter.line_segment([Pos2::new(px, timeline.top() + 5.0), Pos2::new(px, timeline.bottom())], Stroke::new(2.0_f32, MINT));
+        painter.circle_filled(Pos2::new(px, timeline.top() + 5.0), 5.0, MINT);
         if let Some(pos) = response.hover_pos() {
-            painter.text(Pos2::new(pos.x + 6.0, timeline.top() + 4.0), Align2::LEFT_TOP, format_time(t_of(pos.x)), mono(11.0), SECONDARY);
+            painter.text(Pos2::new(pos.x + 8.0, timeline.top() + 4.0), Align2::LEFT_TOP, format_time(t_of(pos.x)), mono(11.0), SECONDARY);
         }
-        ui.advance_cursor_after_rect(Rect::from_min_max(area.min, Pos2::new(x1, y)));
+        ui.advance_cursor_after_rect(Rect::from_min_max(area.min, Pos2::new(x1, bottom)));
     }
 
     fn tab_view(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
@@ -304,17 +314,18 @@ impl App {
                 ui.label(egui::RichText::new("Edited by hand").font(font(13.0)).color(SECONDARY));
             }
             if synth_on {
-                ui.label(egui::RichText::new(format!("Synth: {tone}")).font(font(13.0)).color(stem_color("guitar")));
+                ui.label(egui::RichText::new(format!("Synth: {tone}")).font(font(13.0)).color(SECONDARY));
             }
             if self.tab.editing {
                 ui.label(egui::RichText::new("Digits type a fret, Shift+Up/Down moves the note to another string, Delete removes, Ctrl+Z undoes, Esc stops").font(font(12.0)).color(SECONDARY));
             }
         });
+        // Save and transcription errors sit right above the score.
         if let Some(e) = &self.tab.error {
-            ui.label(egui::RichText::new(e).font(font(13.0)).color(SECONDARY));
+            ui.label(egui::RichText::new(e).font(font(13.0)).color(FAILURE));
         }
         ui.add_space(6.0);
-        let frame = egui::Frame::new().fill(PANEL).corner_radius(10.0).inner_margin(egui::Margin::same(10));
+        let frame = egui::Frame::new().fill(PANEL).corner_radius(12.0).inner_margin(egui::Margin::same(10));
         frame.show(ui, |ui| {
             ui.set_min_size(ui.available_size());
             if let Some(score) = self.tab.score.clone() {
@@ -365,61 +376,66 @@ impl App {
         }
     }
 
+    // Three columns: chord left, play on the window's centre line, practice controls right.
     fn transport(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
         let rect = ui.max_rect();
+        let center = Pos2::new(ui.ctx().screen_rect().center().x, rect.center().y);
         let p = self.player.lock().unwrap();
         let position = p.position();
 
         // Current and next chord.
-        let left = Rect::from_min_max(rect.min, Pos2::new(rect.left() + 230.0, rect.bottom()));
         if let Some(a) = &self.tab.analysis {
             let current = a.chord_index(position).map(|i| a.chords[i].name()).unwrap_or_else(|| "-".into());
-            ui.painter().text(left.left_center() - Vec2::new(0.0, 8.0), Align2::LEFT_CENTER, &current, bold(30.0), TEXT);
+            ui.painter().text(Pos2::new(rect.left(), rect.center().y - 9.0), Align2::LEFT_CENTER, &current, bold(34.0), TEXT);
             if let Some(next) = a.next_chord(position) {
-                ui.painter().text(left.left_center() + Vec2::new(0.0, 22.0), Align2::LEFT_CENTER, format!("then {}", next.name()), font(14.0), SECONDARY);
+                ui.painter().text(Pos2::new(rect.left(), rect.center().y + 22.0), Align2::LEFT_CENTER, format!("then {}", next.name()), font(13.0), SECONDARY);
             }
         }
 
-        // Play controls in the middle.
-        let middle = Rect::from_center_size(Pos2::new(rect.center().x - 120.0, rect.center().y), Vec2::new(360.0, rect.height()));
-        ui.scope_builder(UiBuilder::new().max_rect(middle).layout(Layout::left_to_right(Align::Center)), |ui| {
-            ui.spacing_mut().item_spacing.x = 10.0;
+        // Play centred, skips beside it, time to the left.
+        let play = Rect::from_center_size(center, Vec2::splat(50.0));
+        ui.scope_builder(UiBuilder::new().max_rect(play), |ui| {
+            if play_button(ui, p.playing).on_hover_text("Play / pause (Space)").clicked() {
+                actions.push(Action::PlayPause);
+            }
+        });
+        ui.painter().text(play.center_top() - Vec2::new(0.0, 2.0), Align2::CENTER_BOTTOM, "Space", chip_font(), white(70));
+        let before = Rect::from_min_max(Pos2::new(center.x - 260.0, rect.top()), Pos2::new(play.left() - 10.0, rect.bottom()));
+        ui.scope_builder(UiBuilder::new().max_rect(before).layout(Layout::right_to_left(Align::Center)), |ui| {
             if pill(ui, "-5s", "Left", false).clicked() {
                 actions.push(Action::Skip(-5));
             }
-            if play_button(ui, p.playing).clicked() {
-                actions.push(Action::PlayPause);
-            }
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new(format!("{} / {}", format_time(position), format_time(p.duration()))).font(mono(12.0)).color(SECONDARY));
+        });
+        let after = Rect::from_min_max(Pos2::new(play.right() + 10.0, rect.top()), Pos2::new(center.x + 200.0, rect.bottom()));
+        ui.scope_builder(UiBuilder::new().max_rect(after).layout(Layout::left_to_right(Align::Center)), |ui| {
             if pill(ui, "+5s", "Right", false).clicked() {
                 actions.push(Action::Skip(5));
             }
         });
-        let below = middle.center_bottom() - Vec2::new(0.0, 8.0);
-        ui.painter().text(below, Align2::CENTER_BOTTOM, format!("{} / {}", format_time(position), format_time(p.duration())), mono(12.0), SECONDARY);
-        ui.painter().text(middle.center_top() + Vec2::new(0.0, 6.0), Align2::CENTER_TOP, "Space", mono(10.0), white(60));
 
         // Steppers and toggles on the right, each with a caption carrying its keys.
-        let right = Rect::from_min_max(Pos2::new(middle.right() + 20.0, rect.top()), rect.max);
-        let mut x = right.right();
+        let mut x = rect.right();
         let group = |ui: &mut Ui, x: &mut f32, caption: &str, keys: &str, width: f32, body: &mut dyn FnMut(&mut Ui, Rect)| {
-            let r = Rect::from_min_max(Pos2::new(*x - width, rect.top() + 14.0), Pos2::new(*x, rect.bottom() - 14.0));
-            ui.painter().text(r.left_top(), Align2::LEFT_TOP, caption, font(11.0), SECONDARY);
-            let cw = text_width(ui, caption, font(11.0));
-            ui.painter().text(r.left_top() + Vec2::new(cw + 6.0, 0.0), Align2::LEFT_TOP, keys, mono(10.0), white(80));
+            let r = Rect::from_min_max(Pos2::new(*x - width, rect.top() + 12.0), Pos2::new(*x, rect.bottom() - 12.0));
+            ui.painter().text(r.left_top(), Align2::LEFT_TOP, caption, bold(11.0), SECONDARY);
+            let cw = text_width(ui, caption, bold(11.0));
+            ui.painter().text(r.left_top() + Vec2::new(cw + 6.0, 0.0), Align2::LEFT_TOP, keys, chip_font(), white(90));
             body(ui, Rect::from_min_max(Pos2::new(r.left(), r.top() + 18.0), r.max));
-            *x -= width + 22.0;
+            *x -= width + 12.0;
         };
         let tone = p.tone_name();
         let synth_on = p.synth_on;
         let has_tab = !self.tab.notes.is_empty();
-        group(ui, &mut x, "Guitar", "Y U", 168.0, &mut |ui, r| {
-            let a = Rect::from_min_size(r.min, Vec2::new(64.0, 30.0));
-            let b = Rect::from_min_size(r.min + Vec2::new(70.0, 0.0), Vec2::new(98.0, 30.0));
+        group(ui, &mut x, "Guitar", "Y U", 150.0, &mut |ui, r| {
+            let a = Rect::from_min_size(r.min, Vec2::new(56.0, 30.0));
+            let b = Rect::from_min_size(r.min + Vec2::new(62.0, 0.0), Vec2::new(88.0, 30.0));
             let (f, c) = if synth_on { (WHITE, Color32::BLACK) } else { (RAISED, if has_tab { TEXT } else { SECONDARY }) };
-            if square(ui, a, Id::new("synth"), if synth_on { "Synth" } else { "Orig" }, f, c).clicked() {
+            if square(ui, a, Id::new("synth"), if synth_on { "Synth" } else { "Orig" }, f, c, 8.0).clicked() {
                 actions.push(Action::ToggleSynth);
             }
-            if square(ui, b, Id::new("tone"), tone, RAISED, TEXT).clicked() {
+            if square(ui, b, Id::new("tone"), tone, RAISED, TEXT, 8.0).clicked() {
                 actions.push(Action::NextTone);
             }
         });
@@ -429,32 +445,32 @@ impl App {
             _ => "Off".into(),
         };
         let loop_on = p.loop_on;
-        group(ui, &mut x, "Loop", "[ ] L \\", 132.0, &mut |ui, r| {
-            let a = Rect::from_min_size(r.min, Vec2::new(132.0, 30.0));
-            let (f, c) = if loop_on { (WHITE, Color32::BLACK) } else { (RAISED, TEXT) };
-            if square(ui, a, Id::new("loop"), &loop_text, f, c).clicked() {
+        group(ui, &mut x, "Loop", "[ ] L \\", 112.0, &mut |ui, r| {
+            let a = Rect::from_min_size(r.min, Vec2::new(112.0, 30.0));
+            let (f, c) = if loop_on { (MINT, Color32::BLACK) } else { (RAISED, TEXT) };
+            if square(ui, a, Id::new("loop"), &loop_text, f, c, 8.0).clicked() {
                 actions.push(Action::ToggleLoop);
             }
         });
         let stepper = |ui: &mut Ui, r: Rect, id: &str, value: String, minus: Action, plus: Action, actions: &mut Vec<Action>| {
-            let a = Rect::from_min_size(r.min, Vec2::new(30.0, 30.0));
-            let b = Rect::from_min_size(r.min + Vec2::new(86.0, 0.0), Vec2::new(30.0, 30.0));
-            if square(ui, a, Id::new((id, "-")), "-", RAISED, TEXT).clicked() {
+            let a = Rect::from_min_size(r.min, Vec2::new(26.0, 30.0));
+            let b = Rect::from_min_size(r.min + Vec2::new(66.0, 0.0), Vec2::new(26.0, 30.0));
+            if square(ui, a, Id::new((id, "-")), "-", RAISED, TEXT, 8.0).clicked() {
                 actions.push(minus);
             }
-            ui.painter().text(Pos2::new(r.left() + 58.0, a.center().y), Align2::CENTER_CENTER, value, bold(14.0), TEXT);
-            if square(ui, b, Id::new((id, "+")), "+", RAISED, TEXT).clicked() {
+            ui.painter().text(Pos2::new(r.left() + 46.0, a.center().y), Align2::CENTER_CENTER, value, mono(13.0), TEXT);
+            if square(ui, b, Id::new((id, "+")), "+", RAISED, TEXT, 8.0).clicked() {
                 actions.push(plus);
             }
         };
         let semitones = p.semitones;
         let speed = (p.rate * 100.0).round() as i32;
         drop(p);
-        group(ui, &mut x, "Pitch", "- = 0", 116.0, &mut |ui, r| {
+        group(ui, &mut x, "Pitch", "- = 0", 92.0, &mut |ui, r| {
             let value = if semitones > 0 { format!("+{semitones}") } else { semitones.to_string() };
             stepper(ui, r, "pitch", value, Action::Pitch(-1), Action::Pitch(1), actions);
         });
-        group(ui, &mut x, "Speed", ", . /", 116.0, &mut |ui, r| {
+        group(ui, &mut x, "Speed", ", . /", 92.0, &mut |ui, r| {
             stepper(ui, r, "speed", format!("{speed}%"), Action::Speed(-1), Action::Speed(1), actions);
         });
     }
@@ -468,7 +484,7 @@ impl App {
         let mut close = false;
         let palette = self.palette.as_mut().unwrap();
         palette.selected = palette.selected.min(matches.len().saturating_sub(1));
-        card(ctx, "palette", |ui| {
+        card(ctx, "palette", 440.0, |ui| {
             let edit = ui.add(
                 egui::TextEdit::singleline(&mut palette.query)
                     .hint_text("Type a command")
@@ -516,18 +532,22 @@ impl App {
             return;
         }
         let commands = self.commands();
-        card(ctx, "help", |ui| {
+        // Two columns so every shortcut fits without scrolling.
+        card(ctx, "help", 760.0, |ui| {
             ui.label(egui::RichText::new("Shortcuts").font(bold(17.0)).color(TEXT));
             ui.add_space(6.0);
             let mut rows: Vec<(String, &str)> = commands.iter().filter(|c| !c.hint.is_empty()).map(|c| (c.title.clone(), c.hint)).collect();
             rows.push(("Command palette".into(), "Ctrl+K"));
             rows.push(("Close this".into(), "Esc"));
-            egui::ScrollArea::vertical().max_height(560.0).show(ui, |ui| {
-                for (title, hint) in rows {
-                    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 24.0), Sense::hover());
-                    ui.painter().text(rect.left_center(), Align2::LEFT_CENTER, title, font(13.5), TEXT);
-                    let w = chip_width(ui, hint);
-                    chip(ui, rect.right_center() - Vec2::new(w + 4.0, 0.0), hint);
+            let half = rows.len().div_ceil(2);
+            ui.columns(2, |columns| {
+                for (column, chunk) in columns.iter_mut().zip(rows.chunks(half)) {
+                    for (title, hint) in chunk {
+                        let (rect, _) = column.allocate_exact_size(Vec2::new(column.available_width(), 23.0), Sense::hover());
+                        column.painter().text(rect.left_center(), Align2::LEFT_CENTER, title, font(13.0), TEXT);
+                        let w = chip_width(column, hint);
+                        chip(column, rect.right_center() - Vec2::new(w + 12.0, 0.0), hint);
+                    }
                 }
             });
         });
@@ -542,21 +562,22 @@ fn backdrop(ctx: &egui::Context) -> bool {
         .fixed_pos(screen.min)
         .show(ctx, |ui| {
             let (rect, response) = ui.allocate_exact_size(screen.size(), Sense::click());
-            ui.painter().rect_filled(rect, 0.0, Color32::from_black_alpha(110));
+            ui.painter().rect_filled(rect, 0.0, Color32::from_black_alpha(140));
             response.clicked()
         })
         .inner
 }
 
-fn card(ctx: &egui::Context, id: &str, body: impl FnOnce(&mut Ui)) {
-    egui::Area::new(Id::new(id)).order(egui::Order::Foreground).anchor(Align2::CENTER_TOP, Vec2::new(0.0, 90.0)).show(ctx, |ui| {
+fn card(ctx: &egui::Context, id: &str, width: f32, body: impl FnOnce(&mut Ui)) {
+    egui::Area::new(Id::new(id)).order(egui::Order::Foreground).anchor(Align2::CENTER_TOP, Vec2::new(0.0, 70.0)).show(ctx, |ui| {
         egui::Frame::new()
             .fill(RAISED)
             .stroke(Stroke::new(1.0_f32, hairline()))
-            .corner_radius(12.0)
+            .corner_radius(14.0)
+            .shadow(egui::Shadow { offset: [0, 12], blur: 30, spread: 0, color: Color32::from_black_alpha(128) })
             .inner_margin(egui::Margin::same(16))
             .show(ui, |ui| {
-                ui.set_width(440.0);
+                ui.set_width(width);
                 body(ui);
             });
     });
@@ -619,7 +640,6 @@ fn draw_row(ui: &Ui, p: &egui::Painter, rect: Rect, row: &[Measure], width: f32,
         p.text(Pos2::new(rect.left() + LABEL_W / 2.0, y), Align2::CENTER_CENTER, *name, mono(10.0), SECONDARY);
         p.line_segment([Pos2::new(rect.left() + LABEL_W, y), Pos2::new(end, y)], Stroke::new(1.0_f32, line));
     }
-    let guitar = stem_color("guitar");
     for (index, m) in row.iter().enumerate() {
         let left = rect.left() + LABEL_W + index as f32 * width;
         p.line_segment([Pos2::new(left, string_y(rect, 1)), Pos2::new(left, string_y(rect, 6))], Stroke::new(1.0_f32, bar));
@@ -634,8 +654,8 @@ fn draw_row(ui: &Ui, p: &egui::Painter, rect: Rect, row: &[Measure], width: f32,
         if m.start() <= position && position < m.end() {
             let cx = beat_x(rect, m.beat_position(position), m, index, width);
             let capsule = Rect::from_min_size(Pos2::new(cx - 4.0, string_y(rect, 1) - 9.0), Vec2::new(22.0, LINE_GAP * 5.0 + 18.0));
-            p.rect_filled(capsule, 11.0, white(18));
-            p.rect_stroke(capsule, 11.0, Stroke::new(2.0_f32, WHITE), StrokeKind::Middle);
+            p.rect_filled(capsule, 11.0, MINT.gamma_multiply(0.14));
+            p.rect_stroke(capsule, 11.0, Stroke::new(2.0_f32, MINT), StrokeKind::Middle);
         }
         for placed in &m.notes {
             let text = placed.note.fret.to_string();
@@ -644,12 +664,12 @@ fn draw_row(ui: &Ui, p: &egui::Painter, rect: Rect, row: &[Measure], width: f32,
             let y = string_y(rect, placed.note.string);
             let w = text_width(ui, &text, mono(12.0));
             p.rect_filled(Rect::from_min_size(Pos2::new(nx - 1.0, y - 7.0), Vec2::new(w + 2.0, 14.0)), 0.0, PANEL);
-            p.text(Pos2::new(nx, y), Align2::LEFT_CENTER, text, mono(12.0), if sounding { guitar } else { TEXT });
+            p.text(Pos2::new(nx, y), Align2::LEFT_CENTER, text, mono(12.0), if sounding { MINT } else { TEXT });
         }
         draw_rhythm(p, rect, m, index, width);
         if let Some(sel) = selection.filter(|s| s.measure == m.number - 1) {
             let r = Rect::from_min_size(Pos2::new(beat_x(rect, sel.slot, m, index, width) - 4.0, string_y(rect, sel.string) - 8.0), Vec2::new(22.0, 16.0));
-            p.rect_stroke(r, 3.0, Stroke::new(2.0_f32, WHITE), StrokeKind::Middle);
+            p.rect_stroke(r, 3.0, Stroke::new(2.0_f32, MINT), StrokeKind::Middle);
         }
     }
     p.line_segment([Pos2::new(end, string_y(rect, 1)), Pos2::new(end, string_y(rect, 6))], Stroke::new(1.0_f32, bar));
@@ -711,7 +731,7 @@ fn scrolling_tab(ui: &mut Ui, notes: &[crate::song::TabNote], position: f64) {
         }
         let sounding = n.start <= position && position < n.end;
         p.rect_filled(Rect::from_min_size(Pos2::new(x - 2.0, y(n.string) - 7.0), Vec2::new(18.0, 14.0)), 0.0, PANEL);
-        p.text(Pos2::new(x, y(n.string)), Align2::LEFT_CENTER, n.fret.to_string(), mono(12.0), if sounding { stem_color("guitar") } else { TEXT });
+        p.text(Pos2::new(x, y(n.string)), Align2::LEFT_CENTER, n.fret.to_string(), mono(12.0), if sounding { MINT } else { TEXT });
     }
-    p.line_segment([Pos2::new(head, rect.top() + 9.0), Pos2::new(head, rect.bottom() - 9.0)], Stroke::new(1.5_f32, WHITE));
+    p.line_segment([Pos2::new(head, rect.top() + 9.0), Pos2::new(head, rect.bottom() - 9.0)], Stroke::new(2.0_f32, MINT));
 }

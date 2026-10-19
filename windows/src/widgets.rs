@@ -1,12 +1,16 @@
-// Dark Moises-like theme and the few painted controls the app needs.
+// The reviewed design system (DESIGN.md at the repo root) and the few painted controls the app needs.
 use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, Vec2};
 
 pub const GROUND: Color32 = Color32::from_rgb(14, 15, 17);
 pub const PANEL: Color32 = Color32::from_rgb(23, 25, 29);
 pub const RAISED: Color32 = Color32::from_rgb(33, 36, 41);
 pub const TEXT: Color32 = Color32::from_rgb(242, 245, 247);
-pub const SECONDARY: Color32 = Color32::from_rgb(155, 163, 175);
+pub const SECONDARY: Color32 = Color32::from_rgb(156, 163, 176);
 pub const WHITE: Color32 = Color32::WHITE;
+// Mint marks playback and selection, nothing else.
+pub const MINT: Color32 = Color32::from_rgb(92, 242, 209);
+// Error text only.
+pub const FAILURE: Color32 = Color32::from_rgb(255, 107, 102);
 
 // White at `alpha` / 255 blended in display space. egui's from_white_alpha premultiplies in linear space,
 // which makes a 9 % overlay look like 40 %.
@@ -38,6 +42,11 @@ pub fn bold(size: f32) -> FontId {
     FontId::new(size, egui::FontFamily::Name("bold".into()))
 }
 
+// Key chips: a proportional semibold face (Segoe UI on Windows) so O and 0 stay distinct.
+pub fn chip_font() -> FontId {
+    bold(10.5)
+}
+
 pub fn mono(size: f32) -> FontId {
     FontId::monospace(size)
 }
@@ -51,10 +60,11 @@ pub fn chip(ui: &Ui, left_center: Pos2, text: &str) -> f32 {
     if text.is_empty() {
         return 0.0;
     }
-    let w = text_width(ui, text, mono(10.5)) + 10.0;
+    let w = chip_width(ui, text);
     let rect = Rect::from_min_size(left_center - Vec2::new(0.0, 9.0), Vec2::new(w, 18.0));
-    ui.painter().rect_filled(rect, 4.0, white(14));
-    ui.painter().text(rect.center(), Align2::CENTER_CENTER, text, mono(10.5), SECONDARY);
+    ui.painter().rect_filled(rect, 4.0, RAISED);
+    ui.painter().rect_stroke(rect, 4.0, Stroke::new(1.0_f32, hairline()), StrokeKind::Inside);
+    ui.painter().text(rect.center(), Align2::CENTER_CENTER, text, chip_font(), SECONDARY);
     w
 }
 
@@ -62,25 +72,25 @@ pub fn chip_width(ui: &Ui, text: &str) -> f32 {
     if text.is_empty() {
         0.0
     } else {
-        text_width(ui, text, mono(10.5)) + 10.0
+        text_width(ui, text, chip_font()) + 10.0
     }
 }
 
-// Rounded pill button with an optional key chip; white when active.
+// Chrome button with an optional key chip; white when active.
 pub fn pill(ui: &mut Ui, label: &str, key: &str, active: bool) -> Response {
     let label_w = text_width(ui, label, font(14.0));
     let key_w = chip_width(ui, key);
-    let size = Vec2::new(label_w + key_w + if key.is_empty() { 24.0 } else { 32.0 }, 32.0);
+    let size = Vec2::new(label_w + key_w + if key.is_empty() { 24.0 } else { 32.0 }, 30.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let (fill, color) = if active { (WHITE, Color32::BLACK) } else if response.hovered() { (Color32::from_rgb(44, 48, 54), TEXT) } else { (RAISED, TEXT) };
-    ui.painter().rect_filled(rect, 16.0, fill);
+    ui.painter().rect_filled(rect, 8.0, fill);
     ui.painter().text(Pos2::new(rect.left() + 12.0, rect.center().y), Align2::LEFT_CENTER, label, font(14.0), color);
     if !key.is_empty() {
         let at = Pos2::new(rect.left() + 20.0 + label_w, rect.center().y);
         if active {
             let r = Rect::from_min_size(at - Vec2::new(0.0, 9.0), Vec2::new(key_w, 18.0));
             ui.painter().rect_filled(r, 4.0, Color32::from_black_alpha(30));
-            ui.painter().text(r.center(), Align2::CENTER_CENTER, key, mono(10.5), Color32::from_gray(60));
+            ui.painter().text(r.center(), Align2::CENTER_CENTER, key, chip_font(), Color32::from_gray(60));
         } else {
             chip(ui, at, key);
         }
@@ -88,20 +98,20 @@ pub fn pill(ui: &mut Ui, label: &str, key: &str, active: bool) -> Response {
     response
 }
 
-// Small square button used by the steppers and the stem headers.
-pub fn square(ui: &mut Ui, rect: Rect, id: egui::Id, label: &str, fill: Color32, color: Color32) -> Response {
+// Fixed-size button: 8 radius for controls, 6 for the mute and solo pills.
+pub fn square(ui: &mut Ui, rect: Rect, id: egui::Id, label: &str, fill: Color32, color: Color32, radius: f32) -> Response {
     let response = ui.interact(rect, id, Sense::click());
     let fill = if response.hovered() && fill == RAISED { Color32::from_rgb(44, 48, 54) } else { fill };
-    ui.painter().rect_filled(rect, 6.0, fill);
+    ui.painter().rect_filled(rect, radius, fill);
     ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, bold(13.0), color);
     response
 }
 
-// White round play button with a black icon.
+// White 48 pt round play button with a black icon.
 pub fn play_button(ui: &mut Ui, playing: bool) -> Response {
-    let (rect, response) = ui.allocate_exact_size(Vec2::splat(52.0), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(50.0), Sense::click());
     let c = rect.center();
-    let radius = if response.hovered() { 26.0 } else { 25.0 };
+    let radius = if response.hovered() { 25.0 } else { 24.0 };
     ui.painter().circle_filled(c, radius, WHITE);
     if playing {
         for dx in [-5.0, 5.0] {
@@ -136,11 +146,11 @@ fn arc(center: Pos2, radius: f32, from: f32, to: f32) -> Vec<Pos2> {
     }).collect()
 }
 
-// Small line icons per stem, drawn in a tinted rounded square.
-pub fn stem_icon(ui: &Ui, rect: Rect, name: &str) {
-    let color = stem_color(name);
+// Small line icons per stem on a tinted disc; grey when the stem cannot be heard.
+pub fn stem_icon(ui: &Ui, rect: Rect, name: &str, audible: bool) {
+    let color = if audible { stem_color(name) } else { SECONDARY.gamma_multiply(0.7) };
     let p = ui.painter();
-    p.rect_filled(rect, 8.0, color.gamma_multiply(0.16));
+    p.circle_filled(rect.center(), rect.width() / 2.0, color.gamma_multiply(0.16));
     let c = rect.center();
     let s = Stroke::new(1.8_f32, color);
     let v = |x: f32, y: f32| c + Vec2::new(x, y);
