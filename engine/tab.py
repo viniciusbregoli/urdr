@@ -6,8 +6,10 @@ from pathlib import Path
 TUNING = [64, 59, 55, 50, 45, 40]
 FRETS = 22
 OPEN_PENALTY = 1.5
-STRETCH = 0.5
-MOVE = 0.3
+STRETCH = 1.0
+MOVE = 1.0
+POSITION_BIAS = 0.01
+OUTLIER = 2.5
 
 
 def transcribe(audio: Path) -> list[dict]:
@@ -55,6 +57,9 @@ def assign_frets(notes: list[dict]) -> list[dict]:
                 options.append((0.0, (string, fret)))
             elif fret in (hand - 1, hand + 4):
                 options.append((STRETCH, (string, fret)))
+            else:
+                # Out of reach without moving the hand: a stray transcription error should not drag the whole phrase.
+                options.append((OUTLIER + 0.01 * abs(fret - hand), (string, fret)))
         return min(options, default=None)
 
     notes = [n for n in notes if positions(n["midi"])]
@@ -62,14 +67,14 @@ def assign_frets(notes: list[dict]) -> list[dict]:
         return []
     inf = float("inf")
     # A small bias towards lower positions breaks ties the way most players finger a phrase.
-    best = {h: (f[0] + 0.01 * h if (f := fingering(notes[0]["midi"], h)) else inf) for h in hands}
+    best = {h: (f[0] + POSITION_BIAS * h if (f := fingering(notes[0]["midi"], h)) else inf) for h in hands}
     back: list[dict[int, int]] = []
     for note in notes[1:]:
         step, pointers = {}, {}
         for h in hands:
             f = fingering(note["midi"], h)
             prev = min(hands, key=lambda p: best[p] + MOVE * abs(p - h))
-            step[h] = best[prev] + MOVE * abs(prev - h) + (f[0] + 0.01 * h if f else inf)
+            step[h] = best[prev] + MOVE * abs(prev - h) + (f[0] + POSITION_BIAS * h if f else inf)
             pointers[h] = prev
         best = step
         back.append(pointers)
