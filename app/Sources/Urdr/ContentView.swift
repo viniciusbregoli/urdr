@@ -22,7 +22,7 @@ struct ContentView: View {
         ZStack {
             VStack(alignment: .leading, spacing: 16) {
                 header
-                if case .ready = model.state { transport; mixer }
+                if case .ready = model.state { transport; mixer; tabSection }
                 Spacer(minLength: 0)
             }
             .padding(20)
@@ -99,6 +99,17 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder private var tabSection: some View {
+        if model.transcribing {
+            ProgressView("Transcribing guitar").controlSize(.small)
+        } else if !model.tabNotes.isEmpty {
+            TabView(notes: model.tabNotes, position: player.position)
+        } else {
+            Text(model.tabError.map { "Tab failed: \($0)" } ?? "Press T to transcribe the guitar into tab")
+                .foregroundStyle(model.tabError == nil ? Color.secondary : .red)
+        }
+    }
+
     private var loopLabel: String {
         guard let start = player.loopStart else { return "Loop off" }
         return "Loop \(format(start)) - \(player.loopEnd.map(format) ?? "...")"
@@ -142,6 +153,7 @@ struct ContentView: View {
             Command(title: "Pitch down", hint: "-", key: KeyEquivalent("-")) { player.semitones = max(-12, player.semitones - 1) },
             Command(title: "Pitch up", hint: "=", key: KeyEquivalent("=")) { player.semitones = min(12, player.semitones + 1) },
             Command(title: "Reset pitch", hint: "0", key: KeyEquivalent("0")) { player.semitones = 0 },
+            Command(title: "Generate guitar tab", hint: "T", key: KeyEquivalent("t")) { Task { await model.generateTab() } },
             Command(title: "Show shortcuts", hint: "?", key: KeyEquivalent("?")) { showHelp = true },
         ]
         for (index, stem) in player.stems.prefix(9).enumerated() {

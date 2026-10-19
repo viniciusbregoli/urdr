@@ -17,13 +17,21 @@ final class UrdrTests: XCTestCase {
         XCTAssertTrue(a.hasPrefix("song-"))
     }
 
+    func testLoadTabReadsEngineOutput() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(#"{"tuning": [64], "notes": [{"start": 1.5, "end": 2, "midi": 69, "amp": 0.4, "string": 1, "fret": 5}]}"#.utf8).write(to: url)
+        XCTAssertEqual(AppModel.loadTab(url), [AppModel.TabNote(start: 1.5, end: 2, midi: 69, string: 1, fret: 5)])
+        XCTAssertEqual(AppModel.loadTab(url.appendingPathExtension("missing")), [])
+    }
+
     func testStemsAreOrderedForDisplay() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
-        for name in ["bass", "other", "vocals", "drums", "guitar"] {
+        for name in ["bass", "other", "vocals", "drums", "guitar", "zither"] {
             FileManager.default.createFile(atPath: folder.appendingPathComponent("\(name).wav").path, contents: Data())
         }
-        XCTAssertEqual(AppModel.stems(in: folder).map(\.name), ["vocals", "drums", "bass", "other", "guitar"])
+        XCTAssertEqual(AppModel.stems(in: folder).map(\.name), ["vocals", "guitar", "drums", "bass", "other", "zither"])
     }
 }

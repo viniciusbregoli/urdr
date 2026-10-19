@@ -29,14 +29,20 @@ enum Engine {
 
     static func separate(audio: URL, out: URL, onProgress: @escaping @Sendable (Double) -> Void) async throws {
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        let log = out.appendingPathComponent("engine.log")
+        try await run(["separate", audio.path, out.path], log: out.appendingPathComponent("engine.log"), onProgress: onProgress)
+    }
+
+    static func tab(audio: URL, out: URL) async throws {
+        try await run(["tab", audio.path, out.path], log: out.deletingLastPathComponent().appendingPathComponent("tab.log")) { _ in }
+    }
+
+    private static func run(_ command: [String], log: URL, onProgress: @escaping @Sendable (Double) -> Void) async throws {
         FileManager.default.createFile(atPath: log.path, contents: nil)
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["uv", "run", "--project", directory.path, "python",
-                             directory.appendingPathComponent("main.py").path,
-                             "separate", audio.path, out.path]
+                             directory.appendingPathComponent("main.py").path] + command
         // GUI apps start with a minimal PATH that lacks Homebrew, where uv lives.
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + (environment["PATH"] ?? "/usr/bin:/bin")
