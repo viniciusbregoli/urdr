@@ -58,4 +58,28 @@ final class UrdrTests: XCTestCase {
         let triggered = zip(ticks, ticks.dropFirst()).flatMap { StemPlayer.notesStarting(in: $0..<$1, notes) }
         XCTAssertEqual(triggered.map(\.start), [0.0, 0.5, 1.0])
     }
+
+    func testScoreSnapsNotesIntoMeasures() {
+        // 120 BPM in 4/4: beats every 0.5 s, bars every 2 s.
+        let analysis = Analysis(bpm: 120, beats: stride(from: 0.0, to: 4, by: 0.5).map { $0 },
+                                downbeats: [0, 2], chords: [.init(start: 0, end: 2, label: "A:min"), .init(start: 2, end: 4, label: "N")])
+        func note(_ start: Double, _ end: Double) -> AppModel.TabNote {
+            AppModel.TabNote(start: start, end: end, midi: 69, string: 1, fret: 5)
+        }
+        let score = Score(notes: [note(0, 0.25), note(0.26, 0.37), note(0.37, 0.5), note(1.99, 3)], analysis: analysis, duration: 4)
+
+        XCTAssertEqual(score.measures.map(\.beatCount), [4, 4])
+        XCTAssertEqual(score.measures[0].notes.map(\.slot), [0, 0.5, 0.75])
+        XCTAssertEqual(score.measures[0].notes.map(\.sixteenths), [2, 1, 1])
+        // 1.99 s is a hair before the second downbeat and belongs on it.
+        XCTAssertEqual(score.measures[1].notes.map(\.slot), [0])
+        XCTAssertEqual(score.measures[1].notes[0].sixteenths, 4)
+        XCTAssertEqual(score.measures[0].chords, [Score.Chord(slot: 0, name: "Am")])
+        XCTAssertEqual(score.measures[1].chords, [])
+
+        let measure = score.measures[1]
+        XCTAssertEqual(measure.beatPosition(at: 2.75), 1.5, accuracy: 1e-9)
+        XCTAssertEqual(measure.time(atBeat: 1.5), 2.75, accuracy: 1e-9)
+        XCTAssertEqual(score.measureIndex(at: 3.9), 1)
+    }
 }

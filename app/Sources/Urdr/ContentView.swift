@@ -120,6 +120,8 @@ struct ContentView: View {
     @ViewBuilder private var tabSection: some View {
         if model.transcribing {
             ProgressView("Transcribing guitar").controlSize(.small)
+        } else if let score = model.score {
+            ScoreView(score: score, position: player.position) { player.seek(to: $0) }
         } else if !model.tabNotes.isEmpty {
             TabView(notes: model.tabNotes, position: player.position)
         } else {
