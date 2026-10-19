@@ -3,6 +3,13 @@ name = "urdr-engine"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "basic-pitch>=0.4.0",
     "demucs>=4.1.0",
+    "setuptools<81",
     "soundfile>=0.14.0",
 ]
+
+[tool.uv]
+environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
+# basic-pitch pins a TensorFlow without Python 3.12 wheels; on macOS it runs its bundled CoreML model instead.
+override-dependencies = ["tensorflow-macos ; sys_platform == 'never'", "tensorflow ; sys_platform == 'never'"]

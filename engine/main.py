@@ -21,12 +21,22 @@ def separate(audio: Path, out: Path) -> None:
         if info["state"] == "end":
             emit("progress", stage="separate", fraction=min(info["segment_offset"] / info["audio_length"], 1.0))
 
-    separator = Separator(model="htdemucs", device=device, callback=on_segment)
+    # The 6-source model adds guitar and piano stems; the guitar stem feeds the tab command.
+    separator = Separator(model="htdemucs_6s", device=device, callback=on_segment)
     _, stems = separator.separate_audio_file(audio)
     out.mkdir(parents=True, exist_ok=True)
     for name, wav in stems.items():
         save_audio(wav, out / f"{name}.wav", samplerate=separator.samplerate)
     emit("done", stems=sorted(stems))
+
+
+def tab(audio: Path, out: Path) -> None:
+    import tab as tablature
+
+    emit("progress", stage="tab", fraction=0.0)
+    notes = tablature.tab(audio)
+    out.write_text(json.dumps({"tuning": tablature.TUNING, "notes": notes}))
+    emit("done", notes=len(notes))
 
 
 def main() -> int:
@@ -35,10 +45,15 @@ def main() -> int:
     sep = sub.add_parser("separate")
     sep.add_argument("audio", type=Path)
     sep.add_argument("out", type=Path)
+    tab_parser = sub.add_parser("tab")
+    tab_parser.add_argument("audio", type=Path)
+    tab_parser.add_argument("out", type=Path)
     args = parser.parse_args()
     try:
         if args.command == "separate":
             separate(args.audio, args.out)
+        elif args.command == "tab":
+            tab(args.audio, args.out)
     except Exception as exc:  # the app shows this message; the traceback goes to stderr
         emit("error", message=str(exc))
         raise
