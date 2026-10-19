@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and test the app
+        working-directory: app
+        run: swift test
+
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+      - name: Lockfile matches pyproject
+        working-directory: engine
+        run: uv lock --check
+      # The self-checks cover the pure logic and need only numpy; the full engine (torch, demucs) is macOS-only.
+      - name: Tab self-check
+        working-directory: engine
+        run: uv run --no-project --python 3.12 python tab.py
+      - name: Analysis self-check
+        working-directory: engine
+        run: uv run --no-project --python 3.12 --with "numpy<2" python analysis.py
