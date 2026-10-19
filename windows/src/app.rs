@@ -140,6 +140,15 @@ impl App {
         matches!(self.status, Status::Ready)
     }
 
+    // `urdr <song>`: a path that is not there is reported instead of leaving the app idle.
+    pub fn open_argument(&mut self, path: &Path) {
+        if path.exists() {
+            self.open_path(path);
+        } else {
+            self.status = Status::Failed(format!("Could not open {}: file not found", path.display()));
+        }
+    }
+
     pub fn open_path(&mut self, path: &Path) {
         if path.is_dir() {
             self.load_folder(path, None);
@@ -628,6 +637,19 @@ mod tests {
         assert!(p.stems[1].solo);
         assert!(!p.stems[1].muted, "the typed character does not also mute");
         assert_eq!(crate::audio::gains(&p.stems), [0.0, 1.0]);
+    }
+
+    #[test]
+    fn missing_command_line_path_is_reported() {
+        let mut app = App::new(false);
+        let missing = song::temp_dir("arg").join("nope.wav");
+        app.open_argument(&missing);
+        match &app.status {
+            Status::Failed(m) => assert_eq!(m, &format!("Could not open {}: file not found", missing.display())),
+            _ => panic!("a missing path must show an error"),
+        }
+        app.open_argument(&song_folder());
+        assert!(app.ready());
     }
 
     #[test]

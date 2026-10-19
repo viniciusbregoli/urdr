@@ -55,9 +55,9 @@ fn main() -> eframe::Result {
             visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0_f32, widgets::hairline());
             cc.egui_ctx.set_visuals(visuals);
             let mut app = app::App::new(true);
-            // `urdr <song>` opens an audio file or a song folder straight from the command line.
-            if let Some(path) = std::env::args_os().skip(1).map(std::path::PathBuf::from).find(|p| p.exists()) {
-                app.open_path(&path);
+            // `urdr <song>` opens an audio file or a song folder straight from the command line; flags are skipped.
+            if let Some(arg) = std::env::args_os().skip(1).find(|a| !a.to_string_lossy().starts_with('-')) {
+                app.open_argument(std::path::Path::new(&arg));
             }
             Ok(Box::new(app))
         }),
