@@ -57,6 +57,7 @@ pub enum Action {
 pub enum Trigger {
     Char(char),
     Key(Key),
+    Shift(Key),
     None,
 }
 
@@ -94,7 +95,10 @@ pub struct App {
     pub drag_from: Option<f64>,
     synth_revision: u64,
     pub last_row: Option<usize>,
+    shifted_digit: bool,
 }
+
+const DIGIT_KEYS: [Key; 9] = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9];
 
 impl App {
     pub fn new() -> App {
@@ -124,6 +128,7 @@ impl App {
             drag_from: None,
             synth_revision: 0,
             last_row: None,
+            shifted_digit: false,
         };
         // `urdr <song>` opens an audio file or a song folder straight from the command line.
         if let Some(path) = std::env::args_os().skip(1).map(PathBuf::from).find(|p| p.exists()) {
@@ -395,9 +400,10 @@ impl App {
             c("Show shortcuts", "?", Trigger::Char('?'), Action::Help),
         ];
         const DIGITS: [&str; 9] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+        const SHIFT_DIGITS: [&str; 9] = ["Shift+1", "Shift+2", "Shift+3", "Shift+4", "Shift+5", "Shift+6", "Shift+7", "Shift+8", "Shift+9"];
         for (i, stem) in p.stems.iter().take(9).enumerate() {
             list.push(c(&format!("Mute {}", stem.name), DIGITS[i], Trigger::Char((b'1' + i as u8) as char), Action::Mute(i)));
-            list.push(c(&format!("Solo {}", stem.name), "", Trigger::None, Action::Solo(i)));
+            list.push(c(&format!("Solo {}", stem.name), SHIFT_DIGITS[i], Trigger::Shift(DIGIT_KEYS[i]), Action::Solo(i)));
         }
         if self.tab.editing {
             // Handled by edit_key; listed here so the help overlay and palette show them.
@@ -483,10 +489,17 @@ impl App {
                     self.run(action);
                     return true;
                 }
-                if self.tab.editing && self.edit_key(*key, modifiers.shift) {
+                // Shift+digit solos by key, since the character it types depends on the keyboard layout.
+                let trigger = if modifiers.shift && DIGIT_KEYS.contains(key) {
+                    self.shifted_digit = true;
+                    Trigger::Shift(*key)
+                } else {
+                    Trigger::Key(*key)
+                };
+                if self.tab.editing && trigger == Trigger::Key(*key) && self.edit_key(*key, modifiers.shift) {
                     return true;
                 }
-                let found = self.commands().into_iter().find(|c| c.trigger == Trigger::Key(*key)).map(|c| c.action);
+                let found = self.commands().into_iter().find(|c| c.trigger == trigger).map(|c| c.action);
                 match found {
                     Some(action) => {
                         self.run(action);
@@ -496,6 +509,10 @@ impl App {
                 }
             }
             Event::Text(text) => {
+                // The character a Shift+digit types depends on the layout; the key event already soloed.
+                if std::mem::take(&mut self.shifted_digit) {
+                    return true;
+                }
                 for ch in text.chars() {
                     // Space arrives as a key event too.
                     if ch == ' ' {
@@ -599,6 +616,17 @@ mod tests {
         assert!(app.tab.error.is_none());
         assert!(!app.tab.transcribing);
         assert_eq!(app.tab.notes.len(), 1);
+    }
+
+    #[test]
+    fn shift_digit_solos_a_stem() {
+        let mut app = app_with_song();
+        app.handle_event(&key(Key::Num2, egui::Modifiers::SHIFT), false);
+        app.handle_event(&text("@"), false);
+        let p = app.player.lock().unwrap();
+        assert!(p.stems[1].solo);
+        assert!(!p.stems[1].muted, "the typed character does not also mute");
+        assert_eq!(crate::audio::gains(&p.stems), [0.0, 1.0]);
     }
 
     fn song_folder() -> PathBuf {
