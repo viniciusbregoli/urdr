@@ -36,6 +36,10 @@ enum Engine {
         try await run(["tab", audio.path, out.path], log: out.deletingLastPathComponent().appendingPathComponent("tab.log")) { _ in }
     }
 
+    static func analyze(audio: URL, out: URL) async throws {
+        try await run(["analyze", audio.path, out.path], log: out.deletingLastPathComponent().appendingPathComponent("analysis.log")) { _ in }
+    }
+
     private static func run(_ command: [String], log: URL, onProgress: @escaping @Sendable (Double) -> Void) async throws {
         FileManager.default.createFile(atPath: log.path, contents: nil)
 

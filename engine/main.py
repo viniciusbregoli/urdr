@@ -39,6 +39,15 @@ def tab(audio: Path, out: Path) -> None:
     emit("done", notes=len(notes))
 
 
+def analyze(audio: Path, out: Path) -> None:
+    import analysis
+
+    emit("progress", stage="analyze", fraction=0.0)
+    result = analysis.analyze(audio)
+    out.write_text(json.dumps(result))
+    emit("done", bpm=result["bpm"], chords=len(result["chords"]))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="urdr-engine")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -48,12 +57,17 @@ def main() -> int:
     tab_parser = sub.add_parser("tab")
     tab_parser.add_argument("audio", type=Path)
     tab_parser.add_argument("out", type=Path)
+    analyze_parser = sub.add_parser("analyze")
+    analyze_parser.add_argument("audio", type=Path)
+    analyze_parser.add_argument("out", type=Path)
     args = parser.parse_args()
     try:
         if args.command == "separate":
             separate(args.audio, args.out)
         elif args.command == "tab":
             tab(args.audio, args.out)
+        elif args.command == "analyze":
+            analyze(args.audio, args.out)
     except Exception as exc:  # the app shows this message; the traceback goes to stderr
         emit("error", message=str(exc))
         raise

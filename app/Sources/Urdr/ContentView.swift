@@ -22,7 +22,7 @@ struct ContentView: View {
         ZStack {
             VStack(alignment: .leading, spacing: 16) {
                 header
-                if case .ready = model.state { transport; mixer; tabSection }
+                if case .ready = model.state { transport; mixer; chordsSection; tabSection }
                 Spacer(minLength: 0)
             }
             .padding(20)
@@ -91,6 +91,7 @@ struct ContentView: View {
             HStack {
                 Text("\(format(player.position)) / \(format(player.duration))").monospacedDigit()
                 Spacer()
+                if let bpm = model.analysis?.bpm { Text("\(Int(bpm.rounded())) BPM") }
                 Text("Speed \(Int((player.rate * 100).rounded()))%")
                 Text("Pitch \(player.semitones > 0 ? "+" : "")\(player.semitones)")
                 if !model.tabNotes.isEmpty {
@@ -100,6 +101,20 @@ struct ContentView: View {
             }
             .font(.callout)
         }
+    }
+
+    @ViewBuilder private var chordsSection: some View {
+        if let analysis = model.analysis {
+            ChordsView(analysis: analysis, position: player.position)
+        } else if model.analyzing {
+            ProgressView("Finding chords and beats").controlSize(.small)
+        } else if let error = model.analysisError {
+            Text("Chord analysis failed: \(error)").foregroundStyle(.red)
+        }
+    }
+
+    private func jumpBar(forward: Bool) {
+        if let time = model.analysis?.downbeat(from: player.position, forward: forward) { player.seek(to: time) }
     }
 
     @ViewBuilder private var tabSection: some View {
@@ -146,6 +161,8 @@ struct ContentView: View {
             Command(title: "Play / pause", hint: "Space", key: .space) { player.togglePlay() },
             Command(title: "Back 5 seconds", hint: "Left", key: .leftArrow) { player.skip(-5) },
             Command(title: "Forward 5 seconds", hint: "Right", key: .rightArrow) { player.skip(5) },
+            Command(title: "Previous bar", hint: "Up", key: .upArrow) { jumpBar(forward: false) },
+            Command(title: "Next bar", hint: "Down", key: .downArrow) { jumpBar(forward: true) },
             Command(title: "Set loop start", hint: "[", key: KeyEquivalent("[")) { player.setLoopStart() },
             Command(title: "Set loop end", hint: "]", key: KeyEquivalent("]")) { player.setLoopEnd() },
             Command(title: "Toggle loop", hint: "L", key: KeyEquivalent("l")) { player.loopOn.toggle() },
