@@ -58,4 +58,46 @@ final class UrdrTests: XCTestCase {
         let triggered = zip(ticks, ticks.dropFirst()).flatMap { StemPlayer.notesStarting(in: $0..<$1, notes) }
         XCTAssertEqual(triggered.map(\.start), [0.0, 0.5, 1.0])
     }
+
+    func testScoreSnapsNotesIntoMeasures() {
+        // 120 BPM in 4/4: beats every 0.5 s, bars every 2 s.
+        let analysis = Analysis(bpm: 120, beats: stride(from: 0.0, to: 4, by: 0.5).map { $0 },
+                                downbeats: [0, 2], chords: [.init(start: 0, end: 2, label: "A:min"), .init(start: 2, end: 4, label: "N")])
+        func note(_ start: Double, _ end: Double) -> AppModel.TabNote {
+            AppModel.TabNote(start: start, end: end, midi: 69, string: 1, fret: 5)
+        }
+        let score = Score(notes: [note(0, 0.25), note(0.26, 0.37), note(0.37, 0.5), note(1.99, 3)], analysis: analysis, duration: 4)
+
+        XCTAssertEqual(score.measures.map(\.beatCount), [4, 4])
+        XCTAssertEqual(score.measures[0].notes.map(\.slot), [0, 0.5, 0.75])
+        XCTAssertEqual(score.measures[0].notes.map(\.sixteenths), [2, 1, 1])
+        // 1.99 s is a hair before the second downbeat and belongs on it.
+        XCTAssertEqual(score.measures[1].notes.map(\.slot), [0])
+        XCTAssertEqual(score.measures[1].notes[0].sixteenths, 4)
+        XCTAssertEqual(score.measures[0].chords, [Score.Chord(slot: 0, name: "Am")])
+        XCTAssertEqual(score.measures[1].chords, [])
+
+        let measure = score.measures[1]
+        XCTAssertEqual(measure.beatPosition(at: 2.75), 1.5, accuracy: 1e-9)
+        XCTAssertEqual(measure.time(atBeat: 1.5), 2.75, accuracy: 1e-9)
+        XCTAssertEqual(score.measureIndex(at: 3.9), 1)
+
+        // A one-beat pickup before the first downbeat must not become the time signature.
+        let pickup = Score(notes: [note(0.1, 0.4), note(0.6, 0.9)],
+                           analysis: Analysis(bpm: 120, beats: [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5], downbeats: [0.5, 2.5], chords: []),
+                           duration: 4.5)
+        XCTAssertEqual(pickup.measures.first?.number, 1)
+        XCTAssertEqual(pickup.beatsPerBar, 4)
+
+        // A double-stop on beat 1 followed by a note on beat 2 is two quarter notes, not sixteenths.
+        let doubleStop = Score(notes: [note(0, 0.5), AppModel.TabNote(start: 0, end: 0.5, midi: 64, string: 2, fret: 5), note(0.5, 1)],
+                               analysis: analysis, duration: 4)
+        XCTAssertEqual(doubleStop.measures[0].notes.map(\.sixteenths), [4, 4, 4])
+
+        // The tempo drifts to 0.6 s beats while the average BPM says 0.5 s: a one-beat note is still a quarter.
+        let drifting = Score(notes: [note(0, 0.6)],
+                             analysis: Analysis(bpm: 120, beats: [0, 0.6, 1.2, 1.8, 2.4, 3.0], downbeats: [0, 2.4], chords: []),
+                             duration: 3)
+        XCTAssertEqual(drifting.measures[0].notes.map(\.sixteenths), [4])
+    }
 }

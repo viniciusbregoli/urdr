@@ -34,6 +34,13 @@ struct ContentView: View {
         .focused($rootFocused)
         .focusEffectDisabled()
         .onAppear { rootFocused = true }
+        // `Urdr <song>` opens a song straight from the terminal.
+        .task {
+            // Requiring an existing file skips the values of AppKit flags such as `-AppleLanguages (en)`.
+            if let path = CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") && FileManager.default.fileExists(atPath: $0) }) {
+                await model.open(URL(fileURLWithPath: path))
+            }
+        }
         .onKeyPress(phases: .down) { press in
             guard !showPalette, !showHelp else { return .ignored }
             if press.key == .escape { return .ignored }
@@ -120,6 +127,8 @@ struct ContentView: View {
     @ViewBuilder private var tabSection: some View {
         if model.transcribing {
             ProgressView("Transcribing guitar").controlSize(.small)
+        } else if let score = model.score {
+            ScoreView(score: score, position: player.position) { player.seek(to: $0) }
         } else if !model.tabNotes.isEmpty {
             TabView(notes: model.tabNotes, position: player.position)
         } else {

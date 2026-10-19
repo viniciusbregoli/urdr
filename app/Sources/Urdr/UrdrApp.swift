@@ -11,6 +11,6 @@ struct UrdrApp: App {
 
     var body: some Scene {
         WindowGroup { ContentView() }
-            .defaultSize(width: 720, height: 460)
+            .defaultSize(width: 1100, height: 820)
     }
 }

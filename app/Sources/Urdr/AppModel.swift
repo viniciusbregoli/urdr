@@ -19,10 +19,16 @@ final class AppModel {
     }
 
     private(set) var state = State.idle
-    private(set) var tabNotes: [TabNote] = [] { didSet { player.synthNotes = tabNotes } }
+    private(set) var tabNotes: [TabNote] = [] {
+        didSet {
+            player.synthNotes = tabNotes
+            rebuildScore()
+        }
+    }
+    private(set) var score: Score?
     private(set) var transcribing = false
     private(set) var tabError: String?
-    private(set) var analysis: Analysis?
+    private(set) var analysis: Analysis? { didSet { rebuildScore() } }
     private(set) var analyzing = false
     private(set) var analysisError: String?
     let player = StemPlayer()
@@ -86,6 +92,15 @@ final class AppModel {
             analysisError = error.localizedDescription
         }
         analyzing = false
+    }
+
+    // Measures need the beat grid, so the score exists only once both the tab and the analysis do.
+    private func rebuildScore() {
+        guard let analysis, !analysis.downbeats.isEmpty, !tabNotes.isEmpty else {
+            score = nil
+            return
+        }
+        score = Score(notes: tabNotes, analysis: analysis, duration: player.duration)
     }
 
     nonisolated static func loadTab(_ url: URL) -> [TabNote] {
