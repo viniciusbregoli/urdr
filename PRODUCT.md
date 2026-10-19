@@ -24,7 +24,7 @@ A native SwiftUI window on macOS, used at normal desk distance. The stem mixer o
 - Analysis: BPM, beats and downbeats, major/minor chord segments, current and next chord.
 - Tab: generated from the guitar stem, shown as a measure score with chords, rhythm stems and a playback cursor; edit mode with a grid cursor, fret entry, string moves, delete, undo; synth playback with three GM tones (overdriven, clean, acoustic) replacing the original guitar.
 - Library of songs cached under Application Support; songs open from a file picker or a launch argument.
-- Not built yet: lyrics, waveform display, library browser.
+- Not built yet: lyrics, library browser.
 
 ## Brand Commitments
 Name: Urdr. The user asked to take inspiration from Moises' design and layout.

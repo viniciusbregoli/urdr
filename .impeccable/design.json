@@ -252,7 +252,7 @@
     {
       "name": "Mute/Solo Pill",
       "kind": "chip",
-      "refersTo": "pill-solo-on",
+      "refersTo": "pill-solo-on-guitar",
       "description": "24x22 toggles in a lane header; mute fills white, solo fills the stem hue.",
       "html": "<button class=\"ds-pill\">M</button><button class=\"ds-pill ds-pill-solo\">S</button>",
       "css": ".ds-pill{width:24px;height:22px;border:none;border-radius:6px;background:#212429;color:#9CA3B0;font:700 11px -apple-system,system-ui,sans-serif;margin-right:4px}.ds-pill-solo{background:#FFB547;color:#000}.ds-pill:focus-visible{outline:2px solid #5CF2D1}"

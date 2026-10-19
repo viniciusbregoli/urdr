@@ -71,7 +71,8 @@ components:
     rounded: "{rounded.pill}"
     width: "24px"
     height: "22px"
-  pill-solo-on:
+  # Solo fills with the stem's own hue; guitar shown as the example.
+  pill-solo-on-guitar:
     backgroundColor: "{colors.stem-guitar}"
     textColor: "{colors.ground}"
     rounded: "{rounded.pill}"
@@ -160,7 +161,7 @@ Radii: 4 chips, 6 mute/solo pills, 8 controls, 12 lanes and panels, 14 overlays.
 
 ### Chips
 - **Key chip**: raised fill, hairline border, secondary text, SF Rounded 10 semibold, beside every control and in the shortcut overlay.
-- **Mute/solo pills**: 24 x 22; mute fills white, solo fills the stem hue.
+- **Mute/solo pills**: 24 x 22; mute fills white, solo fills that lane's own stem hue (`pill-solo-on-guitar` is the guitar instance).
 
 ### Cards / Containers
 - **Lane**: panel fill, 12 radius. A soloed lane and its header get a 12 % wash and a 1 px stroke in the stem hue; a lane that cannot be heard drops to 70 % with a grey icon, grey level and dim waveform.
