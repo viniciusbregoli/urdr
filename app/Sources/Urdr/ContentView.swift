@@ -66,7 +66,8 @@ struct ContentView: View {
                 showPalette = true
                 return .handled
             }
-            guard press.modifiers.isSubset(of: .shift),
+            // Arrow keys carry the numericPad and function flags, keypad digits numericPad; neither is a real modifier.
+            guard press.modifiers.subtracting([.numericPad, .function]).isSubset(of: .shift),
                   let command = commands.first(where: { $0.key == press.key }) else { return .ignored }
             command.run()
             return .handled
