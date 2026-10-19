@@ -25,6 +25,23 @@ final class UrdrTests: XCTestCase {
         XCTAssertEqual(AppModel.loadTab(url.appendingPathExtension("missing")), [])
     }
 
+    func testLoadAnalysisReadsEngineOutput() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(#"{"bpm": 120.0, "beats": [0.0, 0.5, 1.0, 1.5, 2.0, 2.5], "downbeats": [0.0, 2.0], "chords": [{"start": 0.0, "end": 2.0, "label": "C"}, {"start": 2.0, "end": 3.0, "label": "A:min"}, {"start": 3.0, "end": 4.0, "label": "N"}]}"#.utf8).write(to: url)
+        let analysis = try XCTUnwrap(Analysis.load(url))
+        XCTAssertEqual(analysis.bpm, 120)
+        XCTAssertEqual(analysis.downbeats, [0, 2])
+        XCTAssertEqual(analysis.chords.map(\.name), ["C", "Am", "N.C."])
+        XCTAssertEqual(analysis.chordIndex(at: 2.5), 1)
+        XCTAssertNil(analysis.chordIndex(at: 5))
+        XCTAssertEqual(analysis.downbeat(from: 0.5, forward: true), 2)
+        XCTAssertEqual(analysis.downbeat(from: 2.1, forward: false), 0, "a downbeat just passed is skipped")
+        XCTAssertEqual(analysis.downbeat(from: 2.5, forward: false), 2)
+        XCTAssertNil(analysis.downbeat(from: 2, forward: true))
+        XCTAssertNil(Analysis.load(url.appendingPathExtension("missing")))
+    }
+
     func testStemsAreOrderedForDisplay() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
