@@ -4,7 +4,10 @@ import SwiftUI
 struct ScoreView: View {
     let score: Score
     let position: Double
+    var selection: AppModel.Selection?
     let seek: (Double) -> Void
+    // Set while editing: a click picks a grid spot instead of seeking.
+    var select: ((AppModel.Selection) -> Void)?
 
     private let lineGap = 13.0
     private let staffTop = 36.0
@@ -19,7 +22,7 @@ struct ScoreView: View {
             let rows = stride(from: 0, to: score.measures.count, by: perRow).map { start in
                 Array(score.measures[start..<min(start + perRow, score.measures.count)])
             }
-            let currentRow = score.measureIndex(at: position).map { $0 / perRow }
+            let currentRow = (selection?.measure ?? score.measureIndex(at: position)).map { $0 / perRow }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -65,8 +68,14 @@ struct ScoreView: View {
             let measure = measures[index]
             let left = x(0, in: measure, at: index, width: measureWidth)
             let right = x(Double(measure.beatCount), in: measure, at: index, width: measureWidth)
-            let beat = (location.x - left) / (right - left) * Double(measure.beatCount)
-            seek(measure.time(atBeat: min(max(beat, 0), Double(measure.beatCount))))
+            let beat = min(max((location.x - left) / (right - left) * Double(measure.beatCount), 0), Double(measure.beatCount))
+            if let select {
+                let string = min(max(Int(((location.y - staffTop) / lineGap).rounded()) + 1, 1), 6)
+                select(AppModel.Selection(measure: measure.number - 1,
+                                          slot: min((beat * 4).rounded() / 4, Double(measure.beatCount) - 0.25), string: string))
+            } else {
+                seek(measure.time(atBeat: beat))
+            }
         }
     }
 
@@ -104,6 +113,10 @@ struct ScoreView: View {
             context.draw(label, at: CGPoint(x: noteX, y: y(placed.note.string)), anchor: .leading)
         }
         drawRhythm(measure, at: index, width: width, in: &context)
+        if let selection, selection.measure == measure.number - 1 {
+            let box = CGRect(x: x(selection.slot, in: measure, at: index, width: width) - 4, y: y(selection.string) - 8, width: 22, height: 16)
+            context.stroke(Path(roundedRect: box, cornerRadius: 3), with: .color(.accentColor), lineWidth: 2)
+        }
     }
 
     // shortcut: beams group notes per beat and use one beam level for the whole group, not per-note subdivisions.

@@ -10,7 +10,7 @@ final class AppModel {
         case failed(String)
     }
 
-    struct TabNote: Decodable, Equatable {
+    struct TabNote: Codable, Equatable {
         let start: Double
         let end: Double
         let midi: Int
@@ -19,7 +19,7 @@ final class AppModel {
     }
 
     private(set) var state = State.idle
-    private(set) var tabNotes: [TabNote] = [] {
+    var tabNotes: [TabNote] = [] {
         didSet {
             player.synthNotes = tabNotes
             rebuildScore()
@@ -27,12 +27,21 @@ final class AppModel {
     }
     private(set) var score: Score?
     private(set) var transcribing = false
-    private(set) var tabError: String?
-    private(set) var analysis: Analysis? { didSet { rebuildScore() } }
+    var tabError: String?
+    var analysis: Analysis? { didSet { rebuildScore() } }
     private(set) var analyzing = false
     private(set) var analysisError: String?
     let player = StemPlayer()
-    private var folder: URL?
+    var folder: URL?
+
+    // Tab editing state; the editing logic lives in TabEditor.swift.
+    var editing = false
+    var selection: Selection?
+    var tabEdited = false
+    // A tab file exists, even an empty one, so the grid can be edited.
+    var hasTab = false { didSet { rebuildScore() } }
+    var history: [[TabNote]] = []
+    var pendingDigit: (value: Int, time: Date, selection: Selection)?
 
     // Display order; any extra stem the engine produces is appended alphabetically.
     nonisolated private static let stemOrder = ["vocals", "guitar", "drums", "bass", "piano", "other"]
@@ -54,6 +63,11 @@ final class AppModel {
             try player.load(Self.stems(in: stemsFolder))
             self.folder = folder
             tabNotes = Self.loadTab(folder.appendingPathComponent("tab.json"))
+            tabEdited = Self.isEdited(folder.appendingPathComponent("tab.json"))
+            hasTab = FileManager.default.fileExists(atPath: folder.appendingPathComponent("tab.json").path)
+            history = []
+            editing = false
+            selection = nil
             tabError = nil
             state = .ready(title: audio.deletingPathExtension().lastPathComponent)
             analysis = Analysis.load(folder.appendingPathComponent("analysis.json"))
@@ -71,10 +85,26 @@ final class AppModel {
         transcribing = true
         tabError = nil
         defer { transcribing = false }
+        // Editing is off while the engine rewrites tab.json, so no edit can land between the backup and the new tab.
+        editing = false
+        selection = nil
+        pendingDigit = nil
         do {
+            // Regenerating must never cost the user their hand edits.
+            if tabEdited {
+                let backup = folder.appendingPathComponent("tab.edited.json")
+                try? FileManager.default.removeItem(at: backup)
+                try FileManager.default.copyItem(at: out, to: backup)
+            }
             try await Engine.tab(audio: folder.appendingPathComponent("stems/guitar.wav"), out: out)
+            // The file is already in its own song folder; only the state of a song that is still open changes.
+            guard self.folder == folder else { return }
             tabNotes = Self.loadTab(out)
+            hasTab = true
+            tabEdited = false
+            history = []
         } catch {
+            guard self.folder == folder else { return }
             tabError = error.localizedDescription
         }
     }
@@ -96,11 +126,17 @@ final class AppModel {
 
     // Measures need the beat grid, so the score exists only once both the tab and the analysis do.
     private func rebuildScore() {
-        guard let analysis, !analysis.downbeats.isEmpty, !tabNotes.isEmpty else {
+        guard let analysis, !analysis.downbeats.isEmpty, hasTab || !tabNotes.isEmpty else {
             score = nil
             return
         }
         score = Score(notes: tabNotes, analysis: analysis, duration: player.duration)
+    }
+
+    nonisolated static func isEdited(_ url: URL) -> Bool {
+        struct File: Decodable { let edited: Bool? }
+        guard let data = try? Data(contentsOf: url) else { return false }
+        return (try? JSONDecoder().decode(File.self, from: data).edited) == true
     }
 
     nonisolated static func loadTab(_ url: URL) -> [TabNote] {
