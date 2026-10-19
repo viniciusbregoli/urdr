@@ -33,8 +33,10 @@ fn fonts() -> egui::FontDefinitions {
 }
 
 fn main() -> eframe::Result {
+    // The transport needs about 1280 pt: the centred play cluster reaches 125 pt right of centre and the practice
+    // controls take 502 pt from the right edge. 1300 keeps a margin so they never overlap.
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_title("Urdr").with_inner_size([1280.0, 800.0]).with_min_inner_size([900.0, 560.0]),
+        viewport: egui::ViewportBuilder::default().with_title("Urdr").with_inner_size([1360.0, 820.0]).with_min_inner_size([1300.0, 560.0]),
         renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
