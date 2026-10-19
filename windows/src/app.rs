@@ -203,6 +203,8 @@ impl App {
             has_tab: tab_path.exists(),
             // A regeneration still running for the previous song keeps edits off, like the Mac's transcribing flag.
             transcribing: self.tab_job.is_some(),
+            // Keeps counting across songs, so the synth always notices the new song's notes.
+            revision: self.tab.revision,
             ..Default::default()
         };
         self.tab.set_notes(song::load_tab(&tab_path));
@@ -626,6 +628,20 @@ mod tests {
         assert!(p.stems[1].solo);
         assert!(!p.stems[1].muted, "the typed character does not also mute");
         assert_eq!(crate::audio::gains(&p.stems), [0.0, 1.0]);
+    }
+
+    #[test]
+    fn synth_follows_the_newly_opened_song() {
+        let mut app = app_with_song();
+        app.tick();
+        assert_eq!(app.player.lock().unwrap().synth_notes[0].fret, 7);
+        let second = song_folder();
+        std::fs::write(second.join("tab.json"), r#"{"notes":[{"start":1,"end":1.5,"midi":69,"string":1,"fret":5}]}"#).unwrap();
+        app.load_folder(&second, None);
+        app.tick();
+        let p = app.player.lock().unwrap();
+        assert_eq!(p.synth_notes.len(), 1);
+        assert_eq!(p.synth_notes[0].fret, 5, "the synth plays the new song's tab");
     }
 
     fn song_folder() -> PathBuf {
