@@ -107,4 +107,14 @@ final class UrdrTests: XCTestCase {
         XCTAssertTrue(StemPlayer.ordered(nil, 5) == (nil, 5))
         XCTAssertTrue(StemPlayer.ordered(5, nil) == (5, nil))
     }
+
+    @MainActor
+    func testMarkingTheStartAfterTheEndTurnsTheLoopOn() {
+        let player = StemPlayer()
+        player.loopEnd = 5
+        player.setLoopStart()
+        XCTAssertEqual(player.loopStart, 0)
+        XCTAssertEqual(player.loopEnd, 5)
+        XCTAssertTrue(player.loopOn)
+    }
 }

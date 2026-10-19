@@ -112,7 +112,11 @@ final class StemPlayer {
         seek(to: (isPlaying ? currentPosition() : position) + seconds)
     }
 
-    func setLoopStart() { (loopStart, loopEnd) = Self.ordered(currentPosition(), loopEnd) }
+    // Whichever end is marked second completes the loop and turns it on.
+    func setLoopStart() {
+        (loopStart, loopEnd) = Self.ordered(currentPosition(), loopEnd)
+        if loopEnd != nil { loopOn = true }
+    }
 
     func setLoopEnd() {
         (loopStart, loopEnd) = Self.ordered(loopStart, currentPosition())
