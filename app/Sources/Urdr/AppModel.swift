@@ -26,6 +26,7 @@ final class AppModel {
         }
     }
     private(set) var score: Score?
+    private(set) var waveforms: [String: [Float]] = [:]
     private(set) var transcribing = false
     var tabError: String?
     var analysis: Analysis? { didSet { rebuildScore() } }
@@ -60,7 +61,13 @@ final class AppModel {
                     Task { @MainActor in self.state = .separating(fraction) }
                 }
             }
-            try player.load(Self.stems(in: stemsFolder))
+            let stems = Self.stems(in: stemsFolder)
+            try player.load(stems)
+            waveforms = [:]
+            Task {
+                let peaks = await Task.detached(priority: .userInitiated) { Waveform.peaks(for: stems) }.value
+                if self.folder == folder { waveforms = peaks }
+            }
             self.folder = folder
             tabNotes = Self.loadTab(folder.appendingPathComponent("tab.json"))
             tabEdited = Self.isEdited(folder.appendingPathComponent("tab.json"))

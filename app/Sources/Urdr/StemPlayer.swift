@@ -189,6 +189,10 @@ final class StemPlayer {
         notes.filter { $0.start >= window.lowerBound && $0.start < window.upperBound }
     }
 
+    func isAudible(_ stem: Stem) -> Bool {
+        stems.contains(where: \.solo) ? stem.solo : !stem.muted
+    }
+
     private func applyGains() {
         let anySolo = stems.contains(where: \.solo)
         for stem in stems {
