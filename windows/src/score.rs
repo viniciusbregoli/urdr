@@ -102,7 +102,10 @@ impl Score {
         for (i, (note, (m, slot))) in placed.iter().enumerate() {
             // Notes sharing a slot (a double-stop) measure to the next distinct onset, not to each other.
             let gap = indices[i + 1..].iter().find(|&&x| x > indices[i]).map_or(4, |x| x - indices[i]) as i32;
-            let own = ((note.end - note.start) / beat_length * 4.0 + 0.5) as i32;
+            // Measured against the beat the note starts in, so a drifting tempo keeps the rhythm right.
+            let measure = &measures[*m];
+            let beat = (*slot as usize).min(measure.beat_count() - 1);
+            let own = ((note.end - note.start) / (measure.beats[beat + 1] - measure.beats[beat]) * 4.0 + 0.5) as i32;
             let sixteenths = gap.min(own.max(1)).min(16).max(1);
             measures[*m].notes.push(Note { note: *note, slot: *slot, sixteenths });
         }
@@ -163,6 +166,14 @@ mod tests {
         assert!((measure.beat_position(2.75) - 1.5).abs() < 1e-9);
         assert!((measure.time_at_beat(1.5) - 2.75).abs() < 1e-9);
         assert_eq!(score.measure_index(3.9), Some(1));
+    }
+
+    #[test]
+    fn drifting_tempo_keeps_a_one_beat_note_a_quarter() {
+        // The tempo drifts to 0.6 s beats while the average BPM says 0.5 s.
+        let analysis = grid(vec![0.0, 0.6, 1.2, 1.8, 2.4, 3.0], vec![0.0, 2.4], vec![]);
+        let score = Score::new(&[note(0.0, 0.6)], &analysis, 3.0);
+        assert_eq!(score.measures[0].notes.iter().map(|n| n.sixteenths).collect::<Vec<_>>(), [4]);
     }
 
     #[test]
