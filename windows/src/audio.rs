@@ -153,6 +153,8 @@ impl Player {
 
     pub fn set_loop_start(&mut self) {
         self.loop_start = Some(self.position());
+        // Whichever end is marked second turns the loop on.
+        self.loop_on = self.loop_end.is_some();
         self.order_loop();
     }
 
@@ -493,6 +495,18 @@ mod tests {
         p.seek(3.5);
         p.set_loop_start();
         assert_eq!((p.loop_start, p.loop_end), (Some(3.0), Some(3.5)));
+    }
+
+    #[test]
+    fn marking_the_end_first_then_the_start_turns_the_loop_on() {
+        let mut p = player(vec![("other".into(), sine(220.0, 4.0, 44100))], 44100, 44100);
+        p.seek(2.0);
+        p.set_loop_end();
+        assert!(!p.loop_on, "one end is not a loop yet");
+        p.seek(1.0);
+        p.set_loop_start();
+        assert!(p.loop_on);
+        assert_eq!((p.loop_start, p.loop_end), (Some(1.0), Some(2.0)));
     }
 
     #[test]
