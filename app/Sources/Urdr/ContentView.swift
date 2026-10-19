@@ -43,6 +43,7 @@ struct ContentView: View {
         }
         .onKeyPress(phases: .down) { press in
             guard !showPalette, !showHelp else { return .ignored }
+            if model.editing, let result = editKey(press) { return result }
             if press.key == .escape { return .ignored }
             if press.key == KeyEquivalent("k"), press.modifiers == .command {
                 showPalette = true
@@ -104,6 +105,9 @@ struct ContentView: View {
                 if !model.tabNotes.isEmpty {
                     Text(player.synthOn ? "Synth: \(StemPlayer.tones[player.tone].name)" : "Orig guitar")
                 }
+                if model.editing {
+                    Text("Editing tab").bold().foregroundStyle(Color.accentColor)
+                }
                 Text(loopLabel).foregroundStyle(player.loopOn ? Color.accentColor : .secondary)
             }
             .font(.callout)
@@ -128,13 +132,39 @@ struct ContentView: View {
         if model.transcribing {
             ProgressView("Transcribing guitar").controlSize(.small)
         } else if let score = model.score {
-            ScoreView(score: score, position: player.position) { player.seek(to: $0) }
+            ScoreView(score: score, position: player.position, selection: model.editing ? model.selection : nil,
+                      seek: { player.seek(to: $0) },
+                      select: model.editing ? { model.selection = $0 } : nil)
         } else if !model.tabNotes.isEmpty {
             TabView(notes: model.tabNotes, position: player.position)
         } else {
             Text(model.tabError.map { "Tab failed: \($0)" } ?? "Press T to transcribe the guitar into tab")
                 .foregroundStyle(model.tabError == nil ? Color.secondary : .red)
         }
+    }
+
+    // Edit mode takes over digits, arrows and delete; everything else falls through to the normal shortcuts.
+    private func editKey(_ press: KeyPress) -> KeyPress.Result? {
+        let shift = press.modifiers.contains(.shift)
+        if press.modifiers == .command, press.key == KeyEquivalent("z") {
+            model.undoEdit()
+            return .handled
+        }
+        // Keypad digits carry the numericPad flag and should type frets too.
+        if press.modifiers.subtracting(.numericPad).isEmpty, let digit = press.characters.first?.wholeNumberValue {
+            model.typeDigit(digit)
+            return .handled
+        }
+        switch press.key {
+        case .leftArrow: model.moveSelection(sixteenths: shift ? -4 : -1)
+        case .rightArrow: model.moveSelection(sixteenths: shift ? 4 : 1)
+        case .upArrow: shift ? model.moveSelectedNote(strings: -1) : model.moveSelection(strings: -1)
+        case .downArrow: shift ? model.moveSelectedNote(strings: 1) : model.moveSelection(strings: 1)
+        case .delete, .deleteForward: model.deleteSelectedNote()
+        case .escape: model.toggleEditing()
+        default: return nil
+        }
+        return .handled
     }
 
     private var loopLabel: String {
@@ -185,12 +215,25 @@ struct ContentView: View {
             Command(title: "Generate guitar tab", hint: "T", key: KeyEquivalent("t")) { Task { await model.generateTab() } },
             Command(title: player.synthOn ? "Original guitar" : "Synth guitar", hint: "Y", key: KeyEquivalent("y")) { player.toggleSynth() },
             Command(title: "Next synth tone", hint: "U", key: KeyEquivalent("u")) { player.cycleTone() },
+            Command(title: model.editing ? "Stop editing tab" : "Edit tab", hint: "E", key: KeyEquivalent("e")) { model.toggleEditing() },
             Command(title: "Show shortcuts", hint: "?", key: KeyEquivalent("?")) { showHelp = true },
         ]
         for (index, stem) in player.stems.prefix(9).enumerated() {
             list.append(Command(title: "Mute \(stem.id)", hint: "\(index + 1)",
                                 key: KeyEquivalent(Character("\(index + 1)"))) { player.toggleMute(stem.id) })
             list.append(Command(title: "Solo \(stem.id)", hint: "", key: nil) { player.toggleSolo(stem.id) })
+        }
+        if model.editing {
+            // Handled by editKey; listed here so the help overlay and palette show them.
+            list += [
+                Command(title: "Type a fret at the cursor", hint: "0-22", key: nil) {},
+                Command(title: "Move the edit cursor", hint: "Arrows", key: nil) {},
+                Command(title: "Move the cursor a beat", hint: "Shift+Left/Right", key: nil) {},
+                Command(title: "Move note to the string above", hint: "Shift+Up", key: nil) { model.moveSelectedNote(strings: -1) },
+                Command(title: "Move note to the string below", hint: "Shift+Down", key: nil) { model.moveSelectedNote(strings: 1) },
+                Command(title: "Delete note", hint: "Delete", key: nil) { model.deleteSelectedNote() },
+                Command(title: "Undo edit", hint: "Cmd+Z", key: nil) { model.undoEdit() },
+            ]
         }
         return list
     }
