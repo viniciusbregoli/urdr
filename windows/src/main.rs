@@ -54,7 +54,12 @@ fn main() -> eframe::Result {
             // Panel separators are the toolbar and transport hairlines.
             visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0_f32, widgets::hairline());
             cc.egui_ctx.set_visuals(visuals);
-            Ok(Box::new(app::App::new()))
+            let mut app = app::App::new(true);
+            // `urdr <song>` opens an audio file or a song folder straight from the command line.
+            if let Some(path) = std::env::args_os().skip(1).map(std::path::PathBuf::from).find(|p| p.exists()) {
+                app.open_path(&path);
+            }
+            Ok(Box::new(app))
         }),
     )
 }

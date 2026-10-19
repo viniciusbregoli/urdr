@@ -101,13 +101,17 @@ pub struct App {
 const DIGIT_KEYS: [Key; 9] = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9];
 
 impl App {
-    pub fn new() -> App {
+    // Open the audio device only from a thread that lives as long as the process (the UI thread). cpal's WASAPI
+    // backend caches its device enumerator in the COM apartment of the first thread that asks for a device, so
+    // opening one from a short-lived thread, such as a test thread, leaves the next caller a dead COM object.
+    pub fn new(open_audio: bool) -> App {
         let player = Arc::new(Mutex::new(Player::new(48000)));
-        let (stream, audio_error) = match audio::start_output(player.clone()) {
-            Ok(s) => (Some(s), None),
-            Err(e) => (None, Some(e)),
+        let (stream, audio_error) = match open_audio.then(|| audio::start_output(player.clone())) {
+            Some(Ok(s)) => (Some(s), None),
+            Some(Err(e)) => (None, Some(e)),
+            None => (None, None),
         };
-        let mut app = App {
+        App {
             player,
             stream,
             audio_error,
@@ -129,12 +133,7 @@ impl App {
             synth_revision: 0,
             last_row: None,
             shifted_digit: false,
-        };
-        // `urdr <song>` opens an audio file or a song folder straight from the command line.
-        if let Some(path) = std::env::args_os().skip(1).map(PathBuf::from).find(|p| p.exists()) {
-            app.open_path(&path);
         }
-        app
     }
 
     pub fn ready(&self) -> bool {
@@ -592,7 +591,7 @@ mod tests {
     }
 
     fn app_with_song() -> App {
-        let mut app = App::new();
+        let mut app = App::new(false);
         app.load_folder(&song_folder(), None);
         app
     }
