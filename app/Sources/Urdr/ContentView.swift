@@ -77,6 +77,10 @@ struct ContentView: View {
             command.run()
             return .handled
         }
+        // Edit keys only make sense on the score, so leaving the tab view (V or the switch) ends editing.
+        .onChange(of: pane) { _, newPane in
+            if newPane == .mixer, model.editing { model.toggleEditing() }
+        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.audio]) { result in
             if case .success(let url) = result { open(url) }
             rootFocused = true
