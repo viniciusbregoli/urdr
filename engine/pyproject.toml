@@ -4,12 +4,20 @@ version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "basic-pitch>=0.4.0",
+    "beat-this>=1.1.0",
     "demucs>=4.1.0",
+    "madmom",
+    "numpy<2",
     "setuptools<81",
     "soundfile>=0.14.0",
+    "torch==2.2.2",
+    "torchaudio==2.2.2",
 ]
 
 [tool.uv]
 environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]
 # basic-pitch pins a TensorFlow without Python 3.12 wheels; on macOS it runs its bundled CoreML model instead.
 override-dependencies = ["tensorflow-macos ; sys_platform == 'never'", "tensorflow ; sys_platform == 'never'"]
+
+[tool.uv.sources]
+madmom = { git = "https://github.com/CPJKU/madmom" }
