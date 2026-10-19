@@ -7,12 +7,11 @@ struct TransportBar: View {
     let hasTab: Bool
 
     var body: some View {
+        // Equal side columns keep the play button on the window's centre line.
         HStack(spacing: 24) {
-            chord.frame(width: 220, alignment: .leading)
-            Spacer(minLength: 0)
+            chord.frame(maxWidth: .infinity, alignment: .leading)
             playControls
-            Spacer(minLength: 0)
-            practiceControls
+            practiceControls.frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 20)
         .frame(height: 84)
@@ -80,7 +79,7 @@ struct TransportBar: View {
                 Button { player.loopOn.toggle() } label: {
                     Label(loopLabel, systemImage: "repeat").labelStyle(.titleAndIcon)
                 }
-                .buttonStyle(ChromeButtonStyle(isOn: player.loopOn))
+                .buttonStyle(ChromeButtonStyle(isOn: player.loopOn, onColor: Theme.mint))
                 .disabled(player.loopStart == nil)
                 .help("Toggle loop (L). Set it with [ and ] or by dragging across the lanes.")
             }

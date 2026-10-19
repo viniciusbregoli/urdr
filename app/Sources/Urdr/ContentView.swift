@@ -62,6 +62,11 @@ struct ContentView: View {
             guard !showPalette, !showHelp else { return .ignored }
             if model.editing, let result = editKey(press) { return result }
             if press.key == .escape { return .ignored }
+            if press.modifiers.contains(.shift), let digit = Self.shiftedDigits[press.characters],
+               player.stems.indices.contains(digit - 1) {
+                player.toggleSolo(player.stems[digit - 1].id)
+                return .handled
+            }
             if press.key == KeyEquivalent("k"), press.modifiers == .command {
                 showPalette = true
                 return .handled
@@ -77,6 +82,9 @@ struct ContentView: View {
             rootFocused = true
         }
     }
+
+    // Shift+digit arrives as the shifted character. shortcut: covers US and ABNT2 layouts only, extend the table for others.
+    private static let shiftedDigits = ["!": 1, "@": 2, "#": 3, "$": 4, "%": 5, "^": 6, "¨": 6]
 
     private func open(_ url: URL) {
         Task {
@@ -124,13 +132,22 @@ struct ContentView: View {
             }
         }
         ToolbarItemGroup(placement: .primaryAction) {
-            Button { importing = true } label: { Label("Open", systemImage: "folder") }
-                .keyboardShortcut("o")
-                .help("Open a song (O)")
-            Button { showPalette = true } label: { Label("Commands", systemImage: "command") }
-                .help("Command palette (Cmd+K)")
-            Button { showHelp = true } label: { Label("Shortcuts", systemImage: "keyboard") }
-                .help("Keyboard shortcuts (?)")
+            HStack(spacing: 4) {
+                Button { importing = true } label: { Label("Open", systemImage: "folder") }
+                    .keyboardShortcut("o")
+                    .help("Open a song (O)")
+                KeyChip("O")
+            }
+            HStack(spacing: 4) {
+                Button { showPalette = true } label: { Label("Commands", systemImage: "command") }
+                    .help("Command palette (Cmd+K)")
+                KeyChip("Cmd+K")
+            }
+            HStack(spacing: 4) {
+                Button { showHelp = true } label: { Label("Shortcuts", systemImage: "keyboard") }
+                    .help("Keyboard shortcuts (?)")
+                KeyChip("?")
+            }
         }
     }
 
@@ -303,7 +320,7 @@ struct ContentView: View {
         for (index, stem) in player.stems.prefix(9).enumerated() {
             list.append(Command(title: "Mute \(stem.id)", hint: "\(index + 1)",
                                 key: KeyEquivalent(Character("\(index + 1)"))) { player.toggleMute(stem.id) })
-            list.append(Command(title: "Solo \(stem.id)", hint: "", key: nil) { player.toggleSolo(stem.id) })
+            list.append(Command(title: "Solo \(stem.id)", hint: "Shift+\(index + 1)", key: nil) { player.toggleSolo(stem.id) })
         }
         if model.editing {
             // Handled by editKey; listed here so the help overlay and palette show them.
@@ -369,26 +386,36 @@ struct HelpView: View {
     let close: () -> Void
 
     var body: some View {
-        Overlay(close: close) {
-            VStack(alignment: .leading, spacing: 6) {
+        Overlay(close: close, width: 760) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Shortcuts").font(.headline)
-                ForEach(commands.filter { !$0.hint.isEmpty }) { command in
-                    HStack {
-                        Text(command.title)
-                        Spacer()
-                        KeyChip(command.hint)
+                // Two columns and a scroll so the list fits the smallest window, edit keys included.
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 28), GridItem(.flexible())], alignment: .leading, spacing: 7) {
+                        ForEach(rows, id: \.title) { row in
+                            HStack {
+                                Text(row.title).font(.system(size: 13))
+                                Spacer()
+                                KeyChip(row.hint)
+                            }
+                        }
                     }
                 }
-                HStack { Text("Command palette"); Spacer(); KeyChip("Cmd+K") }
-                HStack { Text("Close this"); Spacer(); KeyChip("Esc") }
+                .frame(maxHeight: 460)
             }
         }
+    }
+
+    private var rows: [(title: String, hint: String)] {
+        commands.filter { !$0.hint.isEmpty }.map { ($0.title, $0.hint) }
+            + [("Command palette", "Cmd+K"), ("Close this", "Esc")]
     }
 }
 
 // Dim backdrop plus a centered card; Esc or a click outside closes it.
 struct Overlay<Content: View>: View {
     let close: () -> Void
+    var width = 420.0
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -397,7 +424,7 @@ struct Overlay<Content: View>: View {
             content
                 .foregroundStyle(Theme.text)
                 .padding(18)
-                .frame(width: 420)
+                .frame(width: width)
                 .background(Theme.raised, in: .rect(cornerRadius: 14))
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.stroke))
                 .shadow(color: .black.opacity(0.5), radius: 30, y: 12)

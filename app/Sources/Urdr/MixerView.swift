@@ -44,6 +44,7 @@ struct MixerView: View {
                     .foregroundStyle(audible ? Color.black : Theme.secondary)
                     .frame(width: 28, height: 28)
                     .background(audible ? tint : Theme.raised, in: .circle)
+                    .overlay(Circle().stroke(tint, lineWidth: stem.solo ? 2 : 0).padding(-3))
                 Text(stem.id.capitalized)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(audible ? Theme.text : Theme.secondary)
@@ -52,18 +53,24 @@ struct MixerView: View {
                 Button("M") { player.toggleMute(stem.id) }
                     .buttonStyle(PillToggleStyle(isOn: stem.muted, tint: Theme.text))
                     .help("Mute \(stem.id) (\(key))")
+                    .accessibilityLabel("Mute \(stem.id)")
+                    .accessibilityValue(stem.muted ? "on" : "off")
                 Button("S") { player.toggleSolo(stem.id) }
                     .buttonStyle(PillToggleStyle(isOn: stem.solo, tint: tint))
-                    .help("Solo \(stem.id)")
+                    .help("Solo \(stem.id) (Shift+\(key))")
+                    .accessibilityLabel("Solo \(stem.id)")
+                    .accessibilityValue(stem.solo ? "on" : "off")
             }
             Slider(value: Binding(get: { Double(stem.volume) }, set: { player.setVolume(stem.id, Float($0)) }), in: 0...1)
                 .controlSize(.mini)
-                .tint(tint)
+                .tint(audible ? tint : Theme.secondary.opacity(0.4))
                 .accessibilityLabel("\(stem.id.capitalized) volume")
         }
         .padding(.horizontal, 12)
         .frame(maxHeight: .infinity)
         .background(Theme.panel, in: .rect(cornerRadius: 12))
+        .soloGlow(stem.solo, tint: tint)
+        .opacity(audible ? 1 : 0.7)
     }
 
     private func timeline(laneHeight: Double) -> some View {
@@ -73,6 +80,7 @@ struct MixerView: View {
                 ForEach(player.stems) { stem in
                     WaveformLane(peaks: waveforms[stem.id] ?? [], tint: Theme.color(for: stem.id),
                                  audible: player.isAudible(stem), progress: player.duration > 0 ? player.position / player.duration : 0)
+                        .soloGlow(stem.solo, tint: Theme.color(for: stem.id))
                         .frame(height: laneHeight)
                 }
                 ChordLane(analysis: analysis, placeholder: chordPlaceholder, duration: player.duration, position: player.position)
@@ -113,14 +121,14 @@ struct MixerView: View {
             func x(_ t: Double) -> Double { t / duration * width }
             if let loop, loop.upperBound > loop.lowerBound {
                 let rect = CGRect(x: x(loop.lowerBound), y: 0, width: x(loop.upperBound) - x(loop.lowerBound), height: size.height)
-                context.fill(Path(rect), with: .color(.white.opacity(loopActive ? 0.09 : 0.04)))
+                context.fill(Path(rect), with: .color(Theme.mint.opacity(loopActive ? 0.14 : 0.06)))
                 for edge in [rect.minX, rect.maxX] {
-                    context.fill(Path(CGRect(x: edge - 0.5, y: 0, width: 1, height: size.height)), with: .color(.white.opacity(0.45)))
+                    context.fill(Path(CGRect(x: edge - 0.5, y: 0, width: 1, height: size.height)), with: .color(Theme.mint.opacity(0.7)))
                 }
             }
             let head = x(position)
-            context.fill(Path(CGRect(x: head - 1, y: 0, width: 2, height: size.height)), with: .color(.white))
-            context.fill(Path(ellipseIn: CGRect(x: head - 5, y: -5, width: 10, height: 10)), with: .color(.white))
+            context.fill(Path(CGRect(x: head - 1, y: 0, width: 2, height: size.height)), with: .color(Theme.mint))
+            context.fill(Path(ellipseIn: CGRect(x: head - 5, y: 0, width: 10, height: 10)), with: .color(Theme.mint))
         }
         .allowsHitTesting(false)
     }
@@ -135,8 +143,8 @@ struct WaveformLane: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            bars(opacity: audible ? 0.38 : 0.12)
-            bars(opacity: audible ? 1 : 0.22)
+            WaveformBars(peaks: peaks, tint: tint, opacity: audible ? 0.38 : 0.12).equatable()
+            WaveformBars(peaks: peaks, tint: tint, opacity: audible ? 1 : 0.22).equatable()
                 .mask(alignment: .leading) {
                     GeometryReader { geometry in Rectangle().frame(width: geometry.size.width * progress) }
                 }
@@ -148,7 +156,15 @@ struct WaveformLane: View {
         }
     }
 
-    private func bars(opacity: Double) -> some View {
+}
+
+// Equatable so a playhead tick, which only moves the mask, does not redraw every bar.
+struct WaveformBars: View, Equatable {
+    let peaks: [Float]
+    let tint: Color
+    let opacity: Double
+
+    var body: some View {
         Canvas { context, size in
             guard !peaks.isEmpty else { return }
             let step = 3.0
@@ -194,6 +210,18 @@ struct ChordLane: View {
                 Text(placeholder)
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondary)
+            }
+        }
+    }
+}
+
+extension View {
+    // A soloed lane is washed and outlined in its own hue.
+    func soloGlow(_ on: Bool, tint: Color) -> some View {
+        overlay {
+            if on {
+                RoundedRectangle(cornerRadius: 12).fill(tint.opacity(0.12)).allowsHitTesting(false)
+                RoundedRectangle(cornerRadius: 12).stroke(tint.opacity(0.8), lineWidth: 1)
             }
         }
     }
