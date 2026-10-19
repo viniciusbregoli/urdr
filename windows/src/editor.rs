@@ -24,6 +24,10 @@ pub struct Tab {
     pub editing: bool,
     pub selection: Option<Selection>,
     pub edited: bool,
+    // A tab file exists, even an empty one, so the grid can be edited.
+    pub has_tab: bool,
+    // Regeneration is rewriting tab.json: editing is off and edits are refused.
+    pub transcribing: bool,
     pub history: Vec<Vec<TabNote>>,
     pub pending_digit: Option<(i32, Instant, Selection)>,
     pub error: Option<String>,
@@ -46,20 +50,28 @@ impl Tab {
     // Measures need the beat grid, so the score exists only once both the tab and the analysis do.
     fn rebuild_score(&mut self) {
         self.score = match &self.analysis {
-            Some(a) if !a.downbeats.is_empty() && !self.notes.is_empty() => Some(Score::new(&self.notes, a, self.duration)),
+            Some(a) if !a.downbeats.is_empty() && (self.has_tab || !self.notes.is_empty()) => Some(Score::new(&self.notes, a, self.duration)),
             _ => None,
         };
     }
 
+    // Leaving edit mode always works; entering needs a grid and no regeneration running.
     pub fn toggle_editing(&mut self, position: f64) {
-        let Some(score) = &self.score else { return };
-        self.editing = !self.editing;
         self.pending_digit = None;
-        if !self.editing || self.selection.is_some() {
+        if self.editing {
+            self.editing = false;
+            return;
+        }
+        let Some(score) = &self.score else { return };
+        if self.transcribing {
+            return;
+        }
+        self.editing = true;
+        if self.selection.is_some() {
             return;
         }
         let measure = score.measure_index(position).unwrap_or(0);
-        let first = score.measures[measure].notes.first();
+        let first = score.measures.get(measure).and_then(|m| m.notes.first());
         self.selection = Some(Selection {
             measure,
             slot: first.map_or(0.0, |n| n.slot),
@@ -101,7 +113,17 @@ impl Tab {
         let Some(sel) = self.selection else { return };
         if let Some((value, time, at)) = self.pending_digit {
             if at == sel && now.duration_since(time) < Duration::from_millis(800) && value > 0 && value * 10 + digit <= FRETS {
+                // One undo step for the whole two-digit fret: drop the entry the first digit pushed.
+                let before_first_digit = self.history.pop();
+                let depth = self.history.len();
                 self.set_fret(value * 10 + digit);
+                if let Some(before) = before_first_digit {
+                    if self.history.len() > depth {
+                        *self.history.last_mut().unwrap() = before;
+                    } else {
+                        self.history.push(before);
+                    }
+                }
                 self.pending_digit = None;
                 return;
             }
@@ -147,6 +169,11 @@ impl Tab {
         if !(0..=FRETS).contains(&fret) {
             return;
         }
+        // A chord can already hold a note on the target string at this slot.
+        let (Some(score), Some(sel)) = (&self.score, self.selection) else { return };
+        if score.measures[sel.measure].notes.iter().any(|n| n.slot == sel.slot && n.note.string == string) {
+            return;
+        }
         let mut notes = self.notes.clone();
         notes[index] = TabNote { string, fret, ..old };
         self.commit(notes);
@@ -157,11 +184,17 @@ impl Tab {
 
     pub fn undo(&mut self) {
         let Some(previous) = self.history.pop() else { return };
+        self.pending_digit = None;
         self.set_notes(previous);
         self.save();
     }
 
     fn commit(&mut self, mut notes: Vec<TabNote>) {
+        if self.transcribing {
+            return;
+        }
+        // Any edit ends a two-digit entry; type_digit sets the pending digit again after its own commit.
+        self.pending_digit = None;
         self.history.push(self.notes.clone());
         if self.history.len() > 200 {
             self.history.remove(0);
@@ -174,8 +207,12 @@ impl Tab {
 
     fn save(&mut self) {
         let Some(folder) = &self.folder else { return };
-        if let Err(e) = song::save_tab(&folder.join("tab.json"), &self.notes) {
-            self.error = Some(format!("Could not save the tab: {e}"));
+        match song::save_tab(&folder.join("tab.json"), &self.notes) {
+            Ok(()) => {
+                self.has_tab = true;
+                self.error = None;
+            }
+            Err(e) => self.error = Some(format!("Could not save the tab, so the latest edits exist only until the song is closed: {e}")),
         }
     }
 }
@@ -231,6 +268,102 @@ mod tests {
         // Shift+Left/Right moves a whole beat.
         tab.move_selection_sixteenths(4);
         assert_eq!(tab.selection, Some(Selection { measure: 1, slot: 0.75, string: 1 }));
+        std::fs::remove_dir_all(folder).ok();
+    }
+
+    fn tab_with(notes: Vec<TabNote>) -> (Tab, PathBuf) {
+        let folder = song::temp_dir("edit");
+        let mut tab = Tab { folder: Some(folder.clone()), duration: 6.0, ..Default::default() };
+        tab.set_analysis(Some(Analysis { bpm: 120.0, beats: (0..12).map(|i| i as f64 * 0.5).collect(), downbeats: vec![0.0, 2.0, 4.0], chords: vec![] }));
+        tab.set_notes(notes);
+        (tab, folder)
+    }
+
+    #[test]
+    fn two_digit_fret_is_one_undo_step_and_undo_clears_the_pending_digit() {
+        let (mut tab, folder) = tab_with(vec![TabNote { start: 0.0, end: 0.5, midi: 62, string: 3, fret: 7 }]);
+        tab.toggle_editing(0.0);
+        tab.move_selection_sixteenths(2);
+        let now = Instant::now();
+        tab.type_digit(1, now);
+        tab.type_digit(2, now + Duration::from_millis(300));
+        assert_eq!(tab.selected_note().unwrap().fret, 12);
+        // One undo removes the whole new note, not just its second digit.
+        tab.undo();
+        assert!(tab.selected_note().is_none());
+        assert_eq!(tab.notes.len(), 1);
+
+        tab.type_digit(1, now);
+        tab.undo();
+        tab.type_digit(2, now + Duration::from_millis(300));
+        assert_eq!(tab.selected_note().unwrap().fret, 2);
+
+        // A deletion between the digits ends the entry too: without it, 1, Delete, 2 would make fret 12.
+        let later = now + Duration::from_secs(10);
+        tab.type_digit(1, later);
+        tab.delete_selected_note();
+        tab.type_digit(2, later + Duration::from_millis(300));
+        assert_eq!(tab.selected_note().unwrap().fret, 2);
+        std::fs::remove_dir_all(folder).ok();
+    }
+
+    #[test]
+    fn string_move_refuses_to_land_on_a_chord_note() {
+        // A double-stop: E on the high e (open) and B on the B string (open) at the same slot.
+        let chord = vec![TabNote { start: 0.0, end: 0.5, midi: 64, string: 1, fret: 0 }, TabNote { start: 0.0, end: 0.5, midi: 59, string: 2, fret: 0 }];
+        let (mut tab, folder) = tab_with(chord.clone());
+        tab.toggle_editing(0.0);
+        tab.selection = Some(Selection { measure: 0, slot: 0.0, string: 1 });
+        tab.move_selected_note(1);
+        assert_eq!(tab.notes, chord);
+        assert_eq!(tab.selection.unwrap().string, 1);
+        std::fs::remove_dir_all(folder).ok();
+    }
+
+    #[test]
+    fn empty_tab_can_be_edited_and_left() {
+        let (mut tab, folder) = tab_with(vec![]);
+        assert!(tab.score.is_none(), "no tab file, no grid");
+        tab.has_tab = true;
+        tab.set_notes(vec![]);
+        tab.toggle_editing(0.0);
+        assert!(tab.editing);
+        tab.type_digit(5, Instant::now());
+        assert_eq!(tab.notes.len(), 1);
+        tab.delete_selected_note();
+        assert!(tab.notes.is_empty());
+        // With the last note gone the grid stays, so E (or Esc) still leaves edit mode.
+        assert!(tab.score.is_some());
+        tab.toggle_editing(0.0);
+        assert!(!tab.editing);
+        std::fs::remove_dir_all(folder).ok();
+    }
+
+    #[test]
+    fn regeneration_keeps_editing_off_and_refuses_edits() {
+        let (mut tab, folder) = tab_with(vec![TabNote { start: 0.0, end: 0.5, midi: 62, string: 3, fret: 7 }]);
+        tab.transcribing = true;
+        tab.toggle_editing(0.0);
+        assert!(!tab.editing);
+        tab.selection = Some(Selection { measure: 0, slot: 0.0, string: 3 });
+        tab.set_fret(9);
+        tab.delete_selected_note();
+        assert_eq!(tab.notes[0].fret, 7);
+        assert!(tab.history.is_empty());
+        assert!(!folder.join("tab.json").exists());
+        std::fs::remove_dir_all(folder).ok();
+    }
+
+    #[test]
+    fn save_errors_are_reported() {
+        let (mut tab, folder) = tab_with(vec![TabNote { start: 0.0, end: 0.5, midi: 62, string: 3, fret: 7 }]);
+        tab.folder = Some(folder.join("gone"));
+        tab.toggle_editing(0.0);
+        tab.set_fret(9);
+        assert!(tab.error.as_deref().unwrap().starts_with("Could not save the tab"));
+        tab.folder = Some(folder.clone());
+        tab.set_fret(10);
+        assert!(tab.error.is_none(), "a later save that works clears the error");
         std::fs::remove_dir_all(folder).ok();
     }
 

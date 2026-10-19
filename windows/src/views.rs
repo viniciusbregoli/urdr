@@ -297,7 +297,7 @@ impl App {
             if self.tab.score.is_some() && pill(ui, if self.tab.editing { "Editing" } else { "Edit" }, "E", self.tab.editing).clicked() {
                 actions.push(Action::ToggleEdit);
             }
-            if pill(ui, if self.transcribing { "Transcribing..." } else { "Generate tab" }, "T", false).clicked() {
+            if pill(ui, if self.tab.transcribing { "Transcribing..." } else { "Generate tab" }, "T", false).clicked() {
                 actions.push(Action::GenerateTab);
             }
             if self.tab.edited {

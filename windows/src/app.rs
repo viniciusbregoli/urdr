@@ -85,9 +85,8 @@ pub struct App {
     pub notice: Option<String>,
     separation: Option<(Receiver<Message>, PathBuf, PathBuf)>,
     analysis_job: Option<(Receiver<Message>, PathBuf)>,
-    tab_job: Option<Receiver<Message>>,
+    tab_job: Option<(Receiver<Message>, PathBuf)>,
     pub analyzing: bool,
-    pub transcribing: bool,
     pub analysis_error: Option<String>,
     pub view: View,
     pub palette: Option<Palette>,
@@ -118,7 +117,6 @@ impl App {
             analysis_job: None,
             tab_job: None,
             analyzing: false,
-            transcribing: false,
             analysis_error: None,
             view: View::Mixer,
             palette: None,
@@ -194,7 +192,15 @@ impl App {
         };
         self.folder = Some(folder.to_path_buf());
         let tab_path = folder.join("tab.json");
-        self.tab = Tab { duration, folder: Some(folder.to_path_buf()), edited: song::is_edited(&tab_path), ..Default::default() };
+        self.tab = Tab {
+            duration,
+            folder: Some(folder.to_path_buf()),
+            edited: song::is_edited(&tab_path),
+            has_tab: tab_path.exists(),
+            // A regeneration still running for the previous song keeps edits off, like the Mac's transcribing flag.
+            transcribing: self.tab_job.is_some(),
+            ..Default::default()
+        };
         self.tab.set_notes(song::load_tab(&tab_path));
         self.tab.set_analysis(Analysis::load(&folder.join("analysis.json")));
         self.title = Some(audio.and_then(|a| a.file_stem()).map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| song::title_for_folder(folder)));
@@ -226,8 +232,13 @@ impl App {
             return;
         }
         self.tab.error = None;
-        self.transcribing = true;
-        self.tab_job = Some(engine::run("tab", &folder.join("stems").join("guitar.wav"), &folder.join("tab.json"), &folder.join("tab.log")));
+        // Editing is off while the engine rewrites tab.json, so no edit can land between the backup and the new tab.
+        self.tab.editing = false;
+        self.tab.selection = None;
+        self.tab.pending_digit = None;
+        self.tab.transcribing = true;
+        let rx = engine::run("tab", &folder.join("stems").join("guitar.wav"), &folder.join("tab.json"), &folder.join("tab.log"));
+        self.tab_job = Some((rx, folder));
     }
 
     fn poll_jobs(&mut self) {
@@ -266,18 +277,23 @@ impl App {
                 }
             }
         }
-        if let Some(rx) = &self.tab_job {
+        if let Some((rx, folder)) = &self.tab_job {
             if let Some(result) = rx.try_iter().find_map(|m| if let Message::Finished(r) = m { Some(r) } else { None }) {
+                let folder = folder.clone();
                 self.tab_job = None;
-                self.transcribing = false;
-                match (result, &self.folder) {
-                    (Ok(()), Some(folder)) => {
+                self.tab.transcribing = false;
+                // The file is already in its own song folder; only the state of a song that is still open changes.
+                if self.folder.as_deref() != Some(folder.as_path()) {
+                    return;
+                }
+                match result {
+                    Ok(()) => {
+                        self.tab.has_tab = true;
                         self.tab.set_notes(song::load_tab(&folder.join("tab.json")));
                         self.tab.edited = false;
                         self.tab.history.clear();
                     }
-                    (Err(e), _) => self.tab.error = Some(format!("Transcription needs the Urdr engine, which does not run on Windows yet ({e})")),
-                    _ => {}
+                    Err(e) => self.tab.error = Some(format!("Transcription needs the Urdr engine, which does not run on Windows yet ({e})")),
                 }
             }
         }
@@ -559,6 +575,33 @@ mod tests {
     }
 
     fn app_with_song() -> App {
+        let mut app = App::new();
+        app.load_folder(&song_folder(), None);
+        app
+    }
+
+    #[test]
+    fn regeneration_result_for_another_song_is_dropped() {
+        let mut app = app_with_song();
+        let first = app.folder.clone().unwrap();
+        app.tab.toggle_editing(0.0);
+        // The engine is not installed here, so the job fails; its error must not land on the next song.
+        app.run(Action::GenerateTab);
+        assert!(!app.tab.editing, "regeneration turns editing off");
+        app.run(Action::ToggleEdit);
+        assert!(!app.tab.editing, "and keeps it off while it runs");
+        app.load_folder(&song_folder(), None);
+        assert_ne!(app.folder.as_ref(), Some(&first));
+        while app.tab_job.is_some() {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            app.poll_jobs();
+        }
+        assert!(app.tab.error.is_none());
+        assert!(!app.tab.transcribing);
+        assert_eq!(app.tab.notes.len(), 1);
+    }
+
+    fn song_folder() -> PathBuf {
         let dir = song::temp_dir("app");
         std::fs::create_dir_all(dir.join("stems")).unwrap();
         let spec = hound::WavSpec { channels: 2, sample_rate: 44100, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
@@ -571,9 +614,7 @@ mod tests {
         }
         std::fs::write(dir.join("analysis.json"), r#"{"bpm":120,"beats":[0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5],"downbeats":[0,2,4],"chords":[{"start":0,"end":2,"label":"A:min"}]}"#).unwrap();
         std::fs::write(dir.join("tab.json"), r#"{"tuning":[64,59,55,50,45,40],"notes":[{"start":0,"end":0.5,"midi":62,"string":3,"fret":7}]}"#).unwrap();
-        let mut app = App::new();
-        app.load_folder(&dir, None);
-        app
+        dir
     }
 
     #[test]
