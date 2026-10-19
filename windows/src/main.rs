@@ -1,4 +1,5 @@
 mod analysis;
+mod editor;
 mod score;
 mod song;
 
