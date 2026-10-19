@@ -34,4 +34,11 @@ final class UrdrTests: XCTestCase {
         }
         XCTAssertEqual(AppModel.stems(in: folder).map(\.name), ["vocals", "guitar", "drums", "bass", "other", "zither"])
     }
+
+    func testSynthWindowTriggersEachNoteOnce() {
+        let notes = [0.0, 0.5, 1.0].map { AppModel.TabNote(start: $0, end: $0 + 0.4, midi: 60, string: 2, fret: 1) }
+        let ticks = [0.0, 0.3, 0.5, 0.9, 1.2]
+        let triggered = zip(ticks, ticks.dropFirst()).flatMap { StemPlayer.notesStarting(in: $0..<$1, notes) }
+        XCTAssertEqual(triggered.map(\.start), [0.0, 0.5, 1.0])
+    }
 }

@@ -93,6 +93,9 @@ struct ContentView: View {
                 Spacer()
                 Text("Speed \(Int((player.rate * 100).rounded()))%")
                 Text("Pitch \(player.semitones > 0 ? "+" : "")\(player.semitones)")
+                if !model.tabNotes.isEmpty {
+                    Text(player.synthOn ? "Synth: \(StemPlayer.tones[player.tone].name)" : "Orig guitar")
+                }
                 Text(loopLabel).foregroundStyle(player.loopOn ? Color.accentColor : .secondary)
             }
             .font(.callout)
@@ -154,6 +157,8 @@ struct ContentView: View {
             Command(title: "Pitch up", hint: "=", key: KeyEquivalent("=")) { player.semitones = min(12, player.semitones + 1) },
             Command(title: "Reset pitch", hint: "0", key: KeyEquivalent("0")) { player.semitones = 0 },
             Command(title: "Generate guitar tab", hint: "T", key: KeyEquivalent("t")) { Task { await model.generateTab() } },
+            Command(title: player.synthOn ? "Original guitar" : "Synth guitar", hint: "Y", key: KeyEquivalent("y")) { player.toggleSynth() },
+            Command(title: "Next synth tone", hint: "U", key: KeyEquivalent("u")) { player.cycleTone() },
             Command(title: "Show shortcuts", hint: "?", key: KeyEquivalent("?")) { showHelp = true },
         ]
         for (index, stem) in player.stems.prefix(9).enumerated() {

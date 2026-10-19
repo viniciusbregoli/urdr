@@ -19,6 +19,11 @@ final class StemPlayer {
     var loopOn = false
     var rate: Float = 1 { didSet { timePitch.rate = rate } }
     var semitones = 0 { didSet { timePitch.pitch = Float(semitones) * 100 } }
+    private(set) var synthOn = false
+    private(set) var tone = 0
+    var synthNotes: [AppModel.TabNote] = []
+
+    static let tones: [(name: String, program: UInt8)] = [("Overdriven", 29), ("Clean", 27), ("Acoustic", 25)]
 
     @ObservationIgnored private let engine = AVAudioEngine()
     @ObservationIgnored private let mixer = AVAudioMixerNode()
@@ -28,14 +33,22 @@ final class StemPlayer {
     @ObservationIgnored private var sampleRate = 44100.0
     @ObservationIgnored private var startPosition = 0.0
     @ObservationIgnored private var ticker: Task<Void, Never>?
+    @ObservationIgnored private let sampler = AVAudioUnitSampler()
+    @ObservationIgnored private var synthClock = 0.0
+    @ObservationIgnored private var sounding: [(midi: UInt8, end: Double)] = []
 
     init() {
         engine.attach(mixer)
         engine.attach(timePitch)
         engine.connect(timePitch, to: engine.mainMixerNode, format: nil)
+        // The synth bypasses the time-pitch unit: tempo follows the source clock and transposing shifts the MIDI notes.
+        engine.attach(sampler)
+        engine.connect(sampler, to: engine.mainMixerNode, format: nil)
+        loadTone()
         ticker = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(30))
+                // 10 ms keeps synth note onsets tight; the observable position is throttled in tick().
+                try? await Task.sleep(for: .milliseconds(10))
                 self?.tick()
             }
         }
@@ -86,10 +99,12 @@ final class StemPlayer {
         position = currentPosition()
         players.values.forEach { $0.stop() }
         isPlaying = false
+        silenceSynth()
     }
 
     func seek(to time: Double) {
         position = min(max(time, 0), duration)
+        silenceSynth()
         if isPlaying { schedule(from: position) }
     }
 
@@ -124,6 +139,56 @@ final class StemPlayer {
         applyGains()
     }
 
+    // Synth replaces the original guitar, like Songsterr's ORIG/SYNTH switch.
+    func toggleSynth() {
+        synthOn.toggle()
+        if let index = stems.firstIndex(where: { $0.id == "guitar" }) {
+            stems[index].muted = synthOn
+            applyGains()
+        }
+        silenceSynth()
+    }
+
+    func cycleTone() {
+        tone = (tone + 1) % Self.tones.count
+        silenceSynth()
+        loadTone()
+    }
+
+    private func loadTone() {
+        let bank = URL(fileURLWithPath: "/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls")
+        try? sampler.loadSoundBankInstrument(at: bank, program: Self.tones[tone].program,
+                                             bankMSB: UInt8(kAUSampler_DefaultMelodicBankMSB),
+                                             bankLSB: UInt8(kAUSampler_DefaultBankLSB))
+    }
+
+    private func silenceSynth() {
+        sounding.forEach { sampler.stopNote($0.midi, onChannel: 0) }
+        sounding = []
+        synthClock = position
+    }
+
+    private func updateSynth(_ now: Double) {
+        guard synthOn else { return }
+        sounding.removeAll { note in
+            if note.end <= now { sampler.stopNote(note.midi, onChannel: 0) }
+            return note.end <= now
+        }
+        // A backwards or long jump is a seek or loop wrap: restart the clock instead of replaying skipped notes.
+        let window = now >= synthClock && now - synthClock < 0.5 ? synthClock..<now : now..<now
+        for note in Self.notesStarting(in: window, synthNotes) {
+            let midi = UInt8(clamping: note.midi + semitones)
+            sampler.startNote(midi, withVelocity: 100, onChannel: 0)
+            sounding.append((midi, note.end))
+        }
+        synthClock = now
+    }
+
+    // Half-open on the left so a note is never triggered twice across consecutive ticks.
+    nonisolated static func notesStarting(in window: Range<Double>, _ notes: [AppModel.TabNote]) -> [AppModel.TabNote] {
+        notes.filter { $0.start >= window.lowerBound && $0.start < window.upperBound }
+    }
+
     private func applyGains() {
         let anySolo = stems.contains(where: \.solo)
         for stem in stems {
@@ -156,11 +221,13 @@ final class StemPlayer {
 
     private func tick() {
         guard isPlaying else { return }
-        position = currentPosition()
+        let now = currentPosition()
+        updateSynth(now)
+        if abs(now - position) >= 1.0 / 30 { position = now }
         // shortcut: a loop wrap re-schedules the players, which leaves an audible gap of a few ms.
-        if loopOn, let start = loopStart, let end = loopEnd, start < end, position >= end {
+        if loopOn, let start = loopStart, let end = loopEnd, start < end, now >= end {
             seek(to: start)
-        } else if position >= duration {
+        } else if now >= duration {
             pause()
             position = 0
         }

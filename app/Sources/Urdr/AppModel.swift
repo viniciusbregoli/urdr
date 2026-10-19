@@ -19,14 +19,14 @@ final class AppModel {
     }
 
     private(set) var state = State.idle
-    private(set) var tabNotes: [TabNote] = []
+    private(set) var tabNotes: [TabNote] = [] { didSet { player.synthNotes = tabNotes } }
     private(set) var transcribing = false
     private(set) var tabError: String?
     let player = StemPlayer()
     private var folder: URL?
 
     // Display order; any extra stem the engine produces is appended alphabetically.
-    private static let stemOrder = ["vocals", "guitar", "drums", "bass", "piano", "other"]
+    nonisolated private static let stemOrder = ["vocals", "guitar", "drums", "bass", "piano", "other"]
 
     static let libraryRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Urdr/Songs")
