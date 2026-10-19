@@ -1,0 +1,321 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-19T22:10:26+00:00",
+  "title": "Design System: Urdr",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Ground",
+        "tonalRamp": [
+          "#22252A",
+          "#393E46",
+          "#505662",
+          "#676F7E",
+          "#818898",
+          "#A5ABB5",
+          "#CDD0D6",
+          "#F1F2F4"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "tonalRamp": [
+          "#22252B",
+          "#383D47",
+          "#4F5664",
+          "#656E80",
+          "#7F889A",
+          "#A4AAB7",
+          "#CCCFD6",
+          "#F1F2F4"
+        ]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised",
+        "tonalRamp": [
+          "#22252A",
+          "#393E46",
+          "#505662",
+          "#676F7F",
+          "#808898",
+          "#A5ABB6",
+          "#CCD0D6",
+          "#F1F2F4"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Text",
+        "tonalRamp": [
+          "#1D2630",
+          "#304050",
+          "#435970",
+          "#56738F",
+          "#708CA9",
+          "#99ADC2",
+          "#C6D1DD",
+          "#EFF2F5"
+        ]
+      },
+      "secondary": {
+        "role": "neutral",
+        "displayName": "Secondary text",
+        "tonalRamp": [
+          "#22252B",
+          "#383E47",
+          "#4F5763",
+          "#666F80",
+          "#7F8999",
+          "#A4ABB7",
+          "#CCD0D6",
+          "#F1F2F4"
+        ]
+      },
+      "mint": {
+        "role": "primary",
+        "displayName": "Playback mint",
+        "tonalRamp": [
+          "#064739",
+          "#09765E",
+          "#0DA684",
+          "#11D5AA",
+          "#2AEEC3",
+          "#68F3D4",
+          "#AAF8E7",
+          "#E7FDF8"
+        ]
+      },
+      "failure": {
+        "role": "tertiary",
+        "displayName": "Failure",
+        "tonalRamp": [
+          "#4C0300",
+          "#800400",
+          "#B20600",
+          "#E60800",
+          "#FF211A",
+          "#FF615C",
+          "#FFA6A3",
+          "#FFE6E5"
+        ]
+      },
+      "stem-vocals": {
+        "role": "secondary",
+        "displayName": "Vocals rose",
+        "tonalRamp": [
+          "#4C0018",
+          "#800028",
+          "#B20037",
+          "#E60047",
+          "#FF1A61",
+          "#FF5C8E",
+          "#FFA3C0",
+          "#FFE5ED"
+        ]
+      },
+      "stem-guitar": {
+        "role": "secondary",
+        "displayName": "Guitar amber",
+        "tonalRamp": [
+          "#4C2E00",
+          "#804C00",
+          "#B26B00",
+          "#E68900",
+          "#FFA31A",
+          "#FFBD5C",
+          "#FFDAA3",
+          "#FFF5E5"
+        ]
+      },
+      "stem-drums": {
+        "role": "secondary",
+        "displayName": "Drums violet",
+        "tonalRamp": [
+          "#140349",
+          "#21057A",
+          "#2E08AB",
+          "#3B0ADC",
+          "#5423F5",
+          "#8563F8",
+          "#BBA7FB",
+          "#ECE7FE"
+        ]
+      },
+      "stem-bass": {
+        "role": "secondary",
+        "displayName": "Bass cyan",
+        "tonalRamp": [
+          "#053E47",
+          "#096776",
+          "#0D90A6",
+          "#10BAD5",
+          "#2AD3EF",
+          "#67E0F3",
+          "#AAEEF8",
+          "#E7FAFD"
+        ]
+      },
+      "stem-piano": {
+        "role": "secondary",
+        "displayName": "Piano green",
+        "tonalRamp": [
+          "#0A4222",
+          "#116E38",
+          "#189A4E",
+          "#1FC665",
+          "#39E07E",
+          "#72E9A4",
+          "#B0F2CC",
+          "#E9FCF1"
+        ]
+      },
+      "stem-other": {
+        "role": "secondary",
+        "displayName": "Other slate",
+        "tonalRamp": [
+          "#1F252E",
+          "#333E4C",
+          "#47576B",
+          "#5C6F8A",
+          "#7589A3",
+          "#9DABBE",
+          "#C8D0DA",
+          "#F0F2F5"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "chord-readout": {
+        "displayName": "Chord readout",
+        "purpose": "The sounding chord in the transport bar; the only large type on the working screen."
+      },
+      "lane-title": {
+        "displayName": "Lane title",
+        "purpose": "Stem names, song title, pane titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Controls, descriptions, overlay rows."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Control group labels and meta (BPM, time)."
+      },
+      "key-chip": {
+        "displayName": "Key chip",
+        "purpose": "Keyboard hints beside controls; SF Rounded so O never reads as 0."
+      }
+    },
+    "shadows": [
+      {
+        "name": "overlay",
+        "value": "0 12px 30px rgba(0,0,0,0.5)",
+        "purpose": "Only on the palette and shortcut overlays, which float over the dimmed window."
+      }
+    ],
+    "motion": [
+      {
+        "name": "chord-change",
+        "value": "numeric text content transition",
+        "purpose": "The chord readout rolls when the chord changes; nothing else animates."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Play Button",
+      "kind": "button",
+      "refersTo": "button-play",
+      "description": "The one large white control, centred in the transport bar.",
+      "html": "<button class=\"ds-play\" aria-label=\"Play\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\"><path d=\"M6 3.5v13l11-6.5z\" fill=\"#000\"/></svg></button>",
+      "css": ".ds-play{width:48px;height:48px;border-radius:50%;border:none;background:#F2F5F7;display:grid;place-items:center;cursor:pointer}.ds-play:hover{background:#fff}.ds-play:focus-visible{outline:2px solid #5CF2D1;outline-offset:3px}.ds-play:active{opacity:.7}"
+    },
+    {
+      "name": "Chrome Button",
+      "kind": "button",
+      "refersTo": "button-chrome",
+      "description": "Every secondary control on the dark chrome: steppers, Open, Edit.",
+      "html": "<button class=\"ds-chrome\">100%</button>",
+      "css": ".ds-chrome{height:30px;padding:0 10px;border:none;border-radius:8px;background:rgba(33,36,41,.7);color:#F2F5F7;font:500 13px -apple-system,system-ui,sans-serif;cursor:pointer}.ds-chrome:hover,.ds-chrome:active{background:#212429}.ds-chrome:focus-visible{outline:2px solid #5CF2D1;outline-offset:2px}"
+    },
+    {
+      "name": "Loop Button (on)",
+      "kind": "button",
+      "refersTo": "button-loop-on",
+      "description": "A chrome button filled mint while the loop is active.",
+      "html": "<button class=\"ds-loop\">0:02-0:05</button>",
+      "css": ".ds-loop{height:30px;padding:0 10px;border:none;border-radius:8px;background:#5CF2D1;color:#000;font:500 13px -apple-system,system-ui,sans-serif;font-variant-numeric:tabular-nums}.ds-loop:focus-visible{outline:2px solid #F2F5F7;outline-offset:2px}"
+    },
+    {
+      "name": "Mute/Solo Pill",
+      "kind": "chip",
+      "refersTo": "pill-solo-on-guitar",
+      "description": "24x22 toggles in a lane header; mute fills white, solo fills the stem hue.",
+      "html": "<button class=\"ds-pill\">M</button><button class=\"ds-pill ds-pill-solo\">S</button>",
+      "css": ".ds-pill{width:24px;height:22px;border:none;border-radius:6px;background:#212429;color:#9CA3B0;font:700 11px -apple-system,system-ui,sans-serif;margin-right:4px}.ds-pill-solo{background:#FFB547;color:#000}.ds-pill:focus-visible{outline:2px solid #5CF2D1}"
+    },
+    {
+      "name": "Key Chip",
+      "kind": "chip",
+      "refersTo": "key-chip",
+      "description": "Keyboard hint beside every control.",
+      "html": "<span class=\"ds-key\">Shift+2</span>",
+      "css": ".ds-key{font:600 10px ui-rounded,-apple-system,system-ui,sans-serif;color:#9CA3B0;background:#212429;border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:1.5px 5px}"
+    },
+    {
+      "name": "Stem Lane",
+      "kind": "custom",
+      "refersTo": "lane",
+      "description": "Signature: a stem's waveform on the shared timeline, played part at full strength, soloed lane washed in its hue.",
+      "html": "<div class=\"ds-lane ds-lane-solo\"><div class=\"ds-wave\"></div><div class=\"ds-head\"></div></div>",
+      "css": ".ds-lane{position:relative;height:72px;border-radius:12px;background:#17191D;overflow:hidden}.ds-lane-solo{box-shadow:inset 0 0 0 1px rgba(255,181,71,.8);background:linear-gradient(rgba(255,181,71,.12),rgba(255,181,71,.12)),#17191D}.ds-wave{position:absolute;inset:8px 0;background:repeating-linear-gradient(90deg,#FFB547 0 2px,transparent 2px 3px);opacity:.38}.ds-head{position:absolute;top:0;bottom:0;left:40%;width:2px;background:#5CF2D1}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Stems Are the Instrument",
+    "overview": "Urdr is a practice room, not a dashboard. The screen is near-black so six coloured lanes can carry the whole song: each stem owns one hue and uses it nowhere else, and a single mint playhead and loop region cut across every lane and the chord lane so the player always sees where they are in all parts at once. White is reserved for the few controls that matter most (play, mute, the sounding chord).",
+    "keyCharacteristics": [
+      "Near-black ground with two lifted panel tones",
+      "One hue per stem, confined to that stem's lane, icon, level and solo state",
+      "Mint marks playback and selection, nothing else",
+      "White primary controls",
+      "A visible key chip beside every control"
+    ],
+    "rules": [
+      {
+        "name": "The One Hue Per Stem Rule",
+        "body": "A stem's hue appears only on that stem's lane, icon, level slider and solo state. Never reuse it for chrome or state.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mint Means Now Rule",
+        "body": "Mint is the playhead, the loop region, the active loop button, the tab cursor, sounding notes and the edit selection. If it is not about playback position or selection, it is not mint.",
+        "section": "colors"
+      },
+      {
+        "name": "The Key On Screen Rule",
+        "body": "Every control shows its key as a chip or names it in its tooltip; a control without a key is unfinished.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Chrome Rule",
+        "body": "Surfaces are separated by tone (ground, panel, raised), not by shadows. The only shadow belongs to floating overlays.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep the timeline shared: anything time-based (lanes, chords, loop) uses the same x scale and the same playhead.",
+      "Do dim a lane that cannot be heard (muted, or not soloed while another lane is): icon, name, waveform and level together.",
+      "Do use tabular numerals for time, speed, pitch and BPM."
+    ],
+    "donts": [
+      "Don't introduce a second accent; state colours beyond mint are limited to failure red.",
+      "Don't paint chrome with stem hues.",
+      "Don't add shadows to panels or lanes.",
+      "Don't use monospace for key chips; O and 0 must stay distinguishable."
+    ]
+  }
+}

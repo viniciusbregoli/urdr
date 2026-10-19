@@ -99,23 +99,23 @@ struct ScoreView: View {
         if sounding {
             let cursor = x(measure.beatPosition(at: position), in: measure, at: index, width: width)
             let capsule = Path(roundedRect: CGRect(x: cursor - 4, y: y(1) - 9, width: 22, height: lineGap * 5 + 18), cornerRadius: 11)
-            context.stroke(capsule, with: .color(.green), lineWidth: 2)
+            context.stroke(capsule, with: .color(Theme.mint), lineWidth: 2)
         }
         for placed in measure.notes {
             let label = context.resolve(Text("\(placed.note.fret)")
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .foregroundStyle(placed.note.start <= position && position < placed.note.end ? Color.green : .primary))
+                .foregroundStyle(placed.note.start <= position && position < placed.note.end ? Theme.mint : Theme.text))
             let labelSize = label.measure(in: CGSize(width: 40, height: 20))
             let noteX = x(placed.slot, in: measure, at: index, width: width)
             context.fill(Path(CGRect(x: noteX - 1, y: y(placed.note.string) - labelSize.height / 2,
                                      width: labelSize.width + 2, height: labelSize.height)),
-                         with: .color(Color(nsColor: .windowBackgroundColor)))
+                         with: .color(Theme.panel))
             context.draw(label, at: CGPoint(x: noteX, y: y(placed.note.string)), anchor: .leading)
         }
         drawRhythm(measure, at: index, width: width, in: &context)
         if let selection, selection.measure == measure.number - 1 {
             let box = CGRect(x: x(selection.slot, in: measure, at: index, width: width) - 4, y: y(selection.string) - 8, width: 22, height: 16)
-            context.stroke(Path(roundedRect: box, cornerRadius: 3), with: .color(.accentColor), lineWidth: 2)
+            context.stroke(Path(roundedRect: box, cornerRadius: 3), with: .color(Theme.mint), lineWidth: 2)
         }
     }
 

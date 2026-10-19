@@ -10,7 +10,10 @@ struct Command: Identifiable {
 }
 
 struct ContentView: View {
+    enum Pane: String { case mixer = "Mixer", tab = "Tab" }
+
     @State private var model = AppModel()
+    @State private var pane = Pane.mixer
     @State private var importing = false
     @State private var showPalette = false
     @State private var showHelp = false
@@ -20,16 +23,30 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                if case .ready = model.state { transport; mixer; chordsSection; tabSection }
-                Spacer(minLength: 0)
+            Theme.ground.ignoresSafeArea()
+            VStack(spacing: 0) {
+                Group {
+                    switch model.state {
+                    case .idle: idle
+                    case .separating(let fraction): separating(fraction)
+                    case .failed(let message): failed(message)
+                    case .ready: pane == .mixer ? AnyView(mixer) : AnyView(tabPane)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if case .ready = model.state {
+                    TransportBar(player: player, analysis: model.analysis, hasTab: !model.tabNotes.isEmpty)
+                }
             }
-            .padding(20)
             if showPalette { PaletteView(commands: commands, close: closeOverlays) }
             if showHelp { HelpView(commands: commands, close: closeOverlays) }
         }
-        .frame(minWidth: 560, minHeight: 360)
+        .toolbar { toolbar }
+        .toolbarBackground(Theme.ground, for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
+        .preferredColorScheme(.dark)
+        .tint(Theme.text)
+        .frame(minWidth: 900, minHeight: 600)
         .focusable()
         .focused($rootFocused)
         .focusEffectDisabled()
@@ -45,28 +62,40 @@ struct ContentView: View {
             guard !showPalette, !showHelp else { return .ignored }
             if model.editing, let result = editKey(press) { return result }
             if press.key == .escape { return .ignored }
+            if press.modifiers.contains(.shift), let digit = Self.shiftedDigits[press.characters],
+               player.stems.indices.contains(digit - 1) {
+                player.toggleSolo(player.stems[digit - 1].id)
+                return .handled
+            }
             if press.key == KeyEquivalent("k"), press.modifiers == .command {
                 showPalette = true
                 return .handled
             }
-            guard press.modifiers.isSubset(of: .shift),
+            // Arrow keys carry the numericPad and function flags, keypad digits numericPad; neither is a real modifier.
+            guard press.modifiers.subtracting([.numericPad, .function]).isSubset(of: .shift),
                   let command = commands.first(where: { $0.key == press.key }) else { return .ignored }
             command.run()
             return .handled
         }
-        .toolbar {
-            Button("Open", systemImage: "folder") { importing = true }
-                .keyboardShortcut("o")
+        // Edit keys only make sense on the score, so leaving the tab view (V or the switch) ends editing.
+        .onChange(of: pane) { _, newPane in
+            if newPane == .mixer, model.editing { model.toggleEditing() }
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.audio]) { result in
-            if case .success(let url) = result {
-                Task {
-                    let scoped = url.startAccessingSecurityScopedResource()
-                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                    await model.open(url)
-                }
-            }
+            if case .success(let url) = result { open(url) }
             rootFocused = true
+        }
+    }
+
+    // Shift+digit arrives as the shifted character. shortcut: covers US and ABNT2 layouts only, extend the table for others.
+    private static let shiftedDigits = ["!": 1, "@": 2, "#": 3, "$": 4, "%": 5, "^": 6, "¨": 6]
+
+    private func open(_ url: URL) {
+        Task {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            pane = .mixer
+            await model.open(url)
         }
     }
 
@@ -76,74 +105,173 @@ struct ContentView: View {
         rootFocused = true
     }
 
-    @ViewBuilder private var header: some View {
-        switch model.state {
-        case .idle:
-            Text("Press O to open a song").font(.title3).foregroundStyle(.secondary)
-        case .separating(let fraction):
-            VStack(alignment: .leading) {
-                Text("Separating stems").font(.headline)
-                ProgressView(value: fraction)
+    // Lives in the native toolbar so it shares the row with the traffic lights.
+    @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            HStack(spacing: 10) {
+                if case .ready(let title) = model.state {
+                    Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                    if let bpm = model.analysis?.bpm {
+                        Text("\(Int(bpm.rounded())) BPM").font(.system(size: 12, weight: .medium).monospacedDigit()).foregroundStyle(Theme.secondary)
+                    }
+                } else {
+                    Text("Urdr").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
+                }
             }
-        case .ready(let title):
-            Text(title).font(.title2.bold())
-        case .failed(let message):
-            Text(message).foregroundStyle(.red).textSelection(.enabled)
+            .padding(.horizontal, 6)
+        }
+        ToolbarItem(placement: .principal) {
+            if case .ready = model.state {
+                HStack(spacing: 8) {
+                    Picker("View", selection: $pane) {
+                        Text("Mixer").tag(Pane.mixer)
+                        Text("Tab").tag(Pane.tab)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 150)
+                    .help("Switch view (V)")
+                    KeyChip("V")
+                }
+            }
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
+            HStack(spacing: 4) {
+                Button { importing = true } label: { Label("Open", systemImage: "folder") }
+                    .keyboardShortcut("o")
+                    .help("Open a song (O)")
+                KeyChip("O")
+            }
+            HStack(spacing: 4) {
+                Button { showPalette = true } label: { Label("Commands", systemImage: "command") }
+                    .help("Command palette (Cmd+K)")
+                KeyChip("Cmd+K")
+            }
+            HStack(spacing: 4) {
+                Button { showHelp = true } label: { Label("Shortcuts", systemImage: "keyboard") }
+                    .help("Keyboard shortcuts (?)")
+                KeyChip("?")
+            }
         }
     }
 
-    private var transport: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Slider(value: Binding(get: { player.position }, set: { player.seek(to: $0) }),
-                   in: 0...max(player.duration, 1))
-            HStack {
-                Text("\(format(player.position)) / \(format(player.duration))").monospacedDigit()
+    private var idle: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "waveform").font(.system(size: 44, weight: .light)).foregroundStyle(Theme.secondary)
+            Text("Open a song to split it into stems").font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.text)
+            Text("Vocals, guitar, drums, bass, piano and the rest, each on its own track.")
+                .font(.system(size: 14)).foregroundStyle(Theme.secondary)
+            HStack(spacing: 8) {
+                Button { importing = true } label: { Label("Choose a song", systemImage: "folder") }
+                    .buttonStyle(ChromeButtonStyle(isOn: true))
+                KeyChip("O")
+            }
+            Text("or drop an audio file here").font(.system(size: 12)).foregroundStyle(Theme.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .dropDestination(for: URL.self) { urls, _ in
+            guard let url = urls.first else { return false }
+            open(url)
+            return true
+        }
+    }
+
+    private func separating(_ fraction: Double) -> some View {
+        VStack(spacing: 14) {
+            Text("Separating stems").font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.text)
+            ProgressView(value: fraction).frame(width: 360)
+            Text("\(Int(fraction * 100))%  This runs once per song; it takes about as long as the song.")
+                .font(.system(size: 12).monospacedDigit()).foregroundStyle(Theme.secondary)
+        }
+    }
+
+    private func failed(_ message: String) -> some View {
+        VStack(spacing: 14) {
+            Text("This song could not be opened").font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.text)
+            Text(message).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.failure)
+                .textSelection(.enabled).frame(maxWidth: 560)
+            Button { importing = true } label: { Label("Open another song", systemImage: "folder") }
+                .buttonStyle(ChromeButtonStyle(isOn: true))
+        }
+    }
+
+    private var mixer: some View {
+        MixerView(player: player, waveforms: model.waveforms, analysis: model.analysis,
+                  chordPlaceholder: model.analyzing ? "Finding chords and beats"
+                      : model.analysisError.map { "Chord analysis failed: \($0)" } ?? "")
+            .padding(16)
+    }
+
+    private var tabPane: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "guitars").foregroundStyle(Theme.color(for: "guitar"))
+                Text("Guitar tab").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
+                if model.tabEdited { Text("edited").font(.system(size: 12)).foregroundStyle(Theme.secondary) }
                 Spacer()
-                if let bpm = model.analysis?.bpm { Text("\(Int(bpm.rounded())) BPM") }
-                Text("Speed \(Int((player.rate * 100).rounded()))%")
-                Text("Pitch \(player.semitones > 0 ? "+" : "")\(player.semitones)")
-                if !model.tabNotes.isEmpty {
-                    Text(player.synthOn ? "Synth: \(StemPlayer.tones[player.tone].name)" : "Orig guitar")
-                }
                 if model.editing {
-                    Text("Editing tab").bold().foregroundStyle(Color.accentColor)
+                    Text("Type a fret, arrows move, Shift+Up/Down changes string, Delete removes, Cmd+Z undoes")
+                        .font(.system(size: 12)).foregroundStyle(Theme.secondary).lineLimit(1)
                 }
-                Text(loopLabel).foregroundStyle(player.loopOn ? Color.accentColor : .secondary)
+                if model.score != nil {
+                    Button { model.toggleEditing() } label: { Label(model.editing ? "Done" : "Edit", systemImage: "pencil") }
+                        .buttonStyle(ChromeButtonStyle(isOn: model.editing))
+                        .help(model.editing ? "Stop editing (Esc or E)" : "Edit the tab (E)")
+                    KeyChip("E")
+                }
             }
-            .font(.callout)
+            tabContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.panel, in: .rect(cornerRadius: 12))
         }
+        .padding(16)
     }
 
-    @ViewBuilder private var chordsSection: some View {
-        if let analysis = model.analysis {
-            ChordsView(analysis: analysis, position: player.position)
-        } else if model.analyzing {
-            ProgressView("Finding chords and beats").controlSize(.small)
-        } else if let error = model.analysisError {
-            Text("Chord analysis failed: \(error)").foregroundStyle(.red)
-        }
-    }
-
-    private func jumpBar(forward: Bool) {
-        if let time = model.analysis?.downbeat(from: player.position, forward: forward) { player.seek(to: time) }
-    }
-
-    @ViewBuilder private var tabSection: some View {
+    @ViewBuilder private var tabContent: some View {
         if model.transcribing {
-            ProgressView("Transcribing guitar").controlSize(.small)
+            VStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                Text("Transcribing the guitar stem").font(.system(size: 13)).foregroundStyle(Theme.secondary)
+            }
         } else if let score = model.score {
             if let error = model.tabError {
-                Text(error).foregroundStyle(.red).textSelection(.enabled)
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.failure)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.top, 12)
             }
             ScoreView(score: score, position: player.position, selection: model.editing ? model.selection : nil,
                       seek: { player.seek(to: $0) },
                       select: model.editing ? { model.selection = $0 } : nil)
+                .padding(.vertical, 8)
         } else if !model.tabNotes.isEmpty {
-            TabView(notes: model.tabNotes, position: player.position)
+            TabView(notes: model.tabNotes, position: player.position).padding()
         } else {
-            Text(model.tabError.map { "Tab failed: \($0)" } ?? "Press T to transcribe the guitar into tab")
-                .foregroundStyle(model.tabError == nil ? Color.secondary : .red)
+            VStack(spacing: 12) {
+                Text(model.tabError.map { "Tab failed: \($0)" } ?? "No tab yet for this song")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(model.tabError == nil ? Theme.text : Theme.failure)
+                Text("Urdr transcribes the guitar stem into tab. Fix anything it gets wrong with Edit.")
+                    .font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                HStack(spacing: 8) {
+                    Button { generateTab() } label: { Label("Transcribe guitar", systemImage: "wand.and.stars") }
+                        .buttonStyle(ChromeButtonStyle(isOn: true))
+                    KeyChip("T")
+                }
+            }
         }
+    }
+
+    private func generateTab() {
+        pane = .tab
+        Task { await model.generateTab() }
+    }
+
+    private func jumpBar(forward: Bool) {
+        if let time = model.analysis?.downbeat(from: player.position, forward: forward) { player.seek(to: time) }
     }
 
     // Edit mode takes over digits, arrows and delete; everything else falls through to the normal shortcuts.
@@ -170,33 +298,6 @@ struct ContentView: View {
         return .handled
     }
 
-    private var loopLabel: String {
-        guard let start = player.loopStart else { return "Loop off" }
-        return "Loop \(format(start)) - \(player.loopEnd.map(format) ?? "...")"
-    }
-
-    private var mixer: some View {
-        VStack(spacing: 10) {
-            ForEach(Array(player.stems.enumerated()), id: \.element.id) { index, stem in
-                HStack {
-                    Text("\(index + 1)").foregroundStyle(.secondary).frame(width: 14)
-                    Text(stem.id.capitalized).frame(width: 70, alignment: .leading)
-                    Toggle("M", isOn: Binding(get: { stem.muted }, set: { _ in player.toggleMute(stem.id) }))
-                        .toggleStyle(.button)
-                    Toggle("S", isOn: Binding(get: { stem.solo }, set: { _ in player.toggleSolo(stem.id) }))
-                        .toggleStyle(.button)
-                    Slider(value: Binding(get: { Double(stem.volume) }, set: { player.setVolume(stem.id, Float($0)) }),
-                           in: 0...1)
-                }
-            }
-        }
-    }
-
-    private func format(_ seconds: Double) -> String {
-        let total = Int(seconds)
-        return String(format: "%d:%02d", total / 60, total % 60)
-    }
-
     private var commands: [Command] {
         var list = [
             Command(title: "Open song", hint: "O", key: KeyEquivalent("o")) { importing = true },
@@ -215,16 +316,20 @@ struct ContentView: View {
             Command(title: "Pitch down", hint: "-", key: KeyEquivalent("-")) { player.semitones = max(-12, player.semitones - 1) },
             Command(title: "Pitch up", hint: "=", key: KeyEquivalent("=")) { player.semitones = min(12, player.semitones + 1) },
             Command(title: "Reset pitch", hint: "0", key: KeyEquivalent("0")) { player.semitones = 0 },
-            Command(title: "Generate guitar tab", hint: "T", key: KeyEquivalent("t")) { Task { await model.generateTab() } },
+            Command(title: pane == .mixer ? "Show the tab" : "Show the mixer", hint: "V", key: KeyEquivalent("v")) { pane = pane == .mixer ? .tab : .mixer },
+            Command(title: "Generate guitar tab", hint: "T", key: KeyEquivalent("t")) { generateTab() },
             Command(title: player.synthOn ? "Original guitar" : "Synth guitar", hint: "Y", key: KeyEquivalent("y")) { player.toggleSynth() },
             Command(title: "Next synth tone", hint: "U", key: KeyEquivalent("u")) { player.cycleTone() },
-            Command(title: model.editing ? "Stop editing tab" : "Edit tab", hint: "E", key: KeyEquivalent("e")) { model.toggleEditing() },
+            Command(title: model.editing ? "Stop editing tab" : "Edit tab", hint: "E", key: KeyEquivalent("e")) {
+                pane = .tab
+                model.toggleEditing()
+            },
             Command(title: "Show shortcuts", hint: "?", key: KeyEquivalent("?")) { showHelp = true },
         ]
         for (index, stem) in player.stems.prefix(9).enumerated() {
             list.append(Command(title: "Mute \(stem.id)", hint: "\(index + 1)",
                                 key: KeyEquivalent(Character("\(index + 1)"))) { player.toggleMute(stem.id) })
-            list.append(Command(title: "Solo \(stem.id)", hint: "", key: nil) { player.toggleSolo(stem.id) })
+            list.append(Command(title: "Solo \(stem.id)", hint: "Shift+\(index + 1)", key: nil) { player.toggleSolo(stem.id) })
         }
         if model.editing {
             // Handled by editKey; listed here so the help overlay and palette show them.
@@ -275,7 +380,7 @@ struct PaletteView: View {
                         KeyChip(command.hint)
                     }
                     .padding(.vertical, 2).padding(.horizontal, 6)
-                    .background(index == selection ? Color.accentColor.opacity(0.25) : .clear, in: .rect(cornerRadius: 5))
+                    .background(index == selection ? Color.white.opacity(0.1) : .clear, in: .rect(cornerRadius: 6))
                 }
             }
         }
@@ -290,49 +395,48 @@ struct HelpView: View {
     let close: () -> Void
 
     var body: some View {
-        Overlay(close: close) {
-            VStack(alignment: .leading, spacing: 6) {
+        Overlay(close: close, width: 760) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Shortcuts").font(.headline)
-                ForEach(commands.filter { !$0.hint.isEmpty }) { command in
-                    HStack {
-                        Text(command.title)
-                        Spacer()
-                        KeyChip(command.hint)
+                // Two columns and a scroll so the list fits the smallest window, edit keys included.
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 28), GridItem(.flexible())], alignment: .leading, spacing: 7) {
+                        ForEach(rows, id: \.title) { row in
+                            HStack {
+                                Text(row.title).font(.system(size: 13))
+                                Spacer()
+                                KeyChip(row.hint)
+                            }
+                        }
                     }
                 }
-                HStack { Text("Command palette"); Spacer(); KeyChip("Cmd+K") }
-                HStack { Text("Close this"); Spacer(); KeyChip("Esc") }
+                .frame(maxHeight: 460)
             }
         }
     }
-}
 
-struct KeyChip: View {
-    let text: String
-    init(_ text: String) { self.text = text }
-
-    var body: some View {
-        if !text.isEmpty {
-            Text(text)
-                .font(.caption.monospaced())
-                .padding(.horizontal, 6).padding(.vertical, 1)
-                .background(.quaternary, in: .rect(cornerRadius: 4))
-        }
+    private var rows: [(title: String, hint: String)] {
+        commands.filter { !$0.hint.isEmpty }.map { ($0.title, $0.hint) }
+            + [("Command palette", "Cmd+K"), ("Close this", "Esc")]
     }
 }
 
 // Dim backdrop plus a centered card; Esc or a click outside closes it.
 struct Overlay<Content: View>: View {
     let close: () -> Void
+    var width = 420.0
     @ViewBuilder let content: Content
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.35).onTapGesture(perform: close)
+            Color.black.opacity(0.55).ignoresSafeArea().onTapGesture(perform: close)
             content
-                .padding(16)
-                .frame(width: 380)
-                .background(.regularMaterial, in: .rect(cornerRadius: 10))
+                .foregroundStyle(Theme.text)
+                .padding(18)
+                .frame(width: width)
+                .background(Theme.raised, in: .rect(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.stroke))
+                .shadow(color: .black.opacity(0.5), radius: 30, y: 12)
         }
         .onExitCommand(perform: close)
     }
