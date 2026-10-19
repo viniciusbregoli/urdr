@@ -78,7 +78,10 @@ struct Score: Equatable {
         for (i, (note, where_)) in placed.enumerated() {
             // Notes sharing a slot (a double-stop) measure to the next distinct onset, not to each other.
             let gap = indices[(i + 1)...].first { $0 > indices[i] }.map { $0 - indices[i] } ?? 4
-            let own = Int((note.end - note.start) / beatLength * 4 + 0.5)
+            // Measured against the beat the note starts in, so a drifting tempo keeps the rhythm right.
+            let measure = measures[where_.measure]
+            let beat = min(Int(where_.slot), measure.beatCount - 1)
+            let own = Int((note.end - note.start) / (measure.beats[beat + 1] - measure.beats[beat]) * 4 + 0.5)
             measures[where_.measure].notes.append(Note(note: note, slot: where_.slot, sixteenths: max(1, min(gap, max(own, 1), 16))))
         }
         for chord in analysis.chords where chord.label != "N" {

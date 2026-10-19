@@ -93,5 +93,11 @@ final class UrdrTests: XCTestCase {
         let doubleStop = Score(notes: [note(0, 0.5), AppModel.TabNote(start: 0, end: 0.5, midi: 64, string: 2, fret: 5), note(0.5, 1)],
                                analysis: analysis, duration: 4)
         XCTAssertEqual(doubleStop.measures[0].notes.map(\.sixteenths), [4, 4, 4])
+
+        // The tempo drifts to 0.6 s beats while the average BPM says 0.5 s: a one-beat note is still a quarter.
+        let drifting = Score(notes: [note(0, 0.6)],
+                             analysis: Analysis(bpm: 120, beats: [0, 0.6, 1.2, 1.8, 2.4, 3.0], downbeats: [0, 2.4], chords: []),
+                             duration: 3)
+        XCTAssertEqual(drifting.measures[0].notes.map(\.sixteenths), [4])
     }
 }
