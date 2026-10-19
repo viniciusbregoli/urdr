@@ -112,8 +112,18 @@ final class StemPlayer {
         seek(to: (isPlaying ? currentPosition() : position) + seconds)
     }
 
-    func setLoopStart() { loopStart = currentPosition() }
-    func setLoopEnd() { loopEnd = currentPosition(); loopOn = loopStart != nil }
+    func setLoopStart() { (loopStart, loopEnd) = Self.ordered(currentPosition(), loopEnd) }
+
+    func setLoopEnd() {
+        (loopStart, loopEnd) = Self.ordered(loopStart, currentPosition())
+        loopOn = loopStart != nil
+    }
+
+    // Marking the ends in either order still gives a playable loop.
+    nonisolated static func ordered(_ start: Double?, _ end: Double?) -> (Double?, Double?) {
+        if let start, let end, end < start { return (end, start) }
+        return (start, end)
+    }
 
     func clearLoop() {
         loopStart = nil
