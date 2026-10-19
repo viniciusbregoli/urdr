@@ -38,6 +38,8 @@ final class AppModel {
     var editing = false
     var selection: Selection?
     var tabEdited = false
+    // A tab file exists, even an empty one, so the grid can be edited.
+    var hasTab = false { didSet { rebuildScore() } }
     var history: [[TabNote]] = []
     var pendingDigit: (value: Int, time: Date, selection: Selection)?
 
@@ -62,6 +64,7 @@ final class AppModel {
             self.folder = folder
             tabNotes = Self.loadTab(folder.appendingPathComponent("tab.json"))
             tabEdited = Self.isEdited(folder.appendingPathComponent("tab.json"))
+            hasTab = FileManager.default.fileExists(atPath: folder.appendingPathComponent("tab.json").path)
             history = []
             editing = false
             selection = nil
@@ -82,6 +85,10 @@ final class AppModel {
         transcribing = true
         tabError = nil
         defer { transcribing = false }
+        // Editing is off while the engine rewrites tab.json, so no edit can land between the backup and the new tab.
+        editing = false
+        selection = nil
+        pendingDigit = nil
         do {
             // Regenerating must never cost the user their hand edits.
             if tabEdited {
@@ -91,6 +98,7 @@ final class AppModel {
             }
             try await Engine.tab(audio: folder.appendingPathComponent("stems/guitar.wav"), out: out)
             tabNotes = Self.loadTab(out)
+            hasTab = true
             tabEdited = false
             history = []
         } catch {
@@ -115,7 +123,7 @@ final class AppModel {
 
     // Measures need the beat grid, so the score exists only once both the tab and the analysis do.
     private func rebuildScore() {
-        guard let analysis, !analysis.downbeats.isEmpty, !tabNotes.isEmpty else {
+        guard let analysis, !analysis.downbeats.isEmpty, hasTab || !tabNotes.isEmpty else {
             score = nil
             return
         }

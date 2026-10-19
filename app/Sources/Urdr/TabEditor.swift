@@ -14,12 +14,16 @@ extension AppModel {
     nonisolated static let frets = 22
 
     func toggleEditing() {
-        guard let score else { return }
-        editing.toggle()
         pendingDigit = nil
-        guard editing, selection == nil else { return }
+        if editing {
+            editing = false
+            return
+        }
+        guard let score, !transcribing else { return }
+        editing = true
+        guard selection == nil else { return }
         let measure = score.measureIndex(at: player.position) ?? 0
-        let first = score.measures[measure].notes.first
+        let first = score.measures.indices.contains(measure) ? score.measures[measure].notes.first : nil
         selection = Selection(measure: measure, slot: first?.slot ?? 0, string: first?.note.string ?? 1)
     }
 
@@ -56,7 +60,13 @@ extension AppModel {
         guard let selection else { return }
         if let pending = pendingDigit, pending.selection == selection, now.timeIntervalSince(pending.time) < 0.8,
            pending.value > 0, pending.value * 10 + digit <= Self.frets {
+            // One undo step for the whole two-digit fret: drop the entry the first digit pushed.
+            let beforeFirstDigit = history.popLast()
+            let depth = history.count
             setFret(pending.value * 10 + digit)
+            if let beforeFirstDigit {
+                if history.count > depth { history[history.count - 1] = beforeFirstDigit } else { history.append(beforeFirstDigit) }
+            }
             pendingDigit = nil
         } else {
             setFret(digit)
@@ -90,20 +100,24 @@ extension AppModel {
         let string = old.string + strings
         guard (1...6).contains(string) else { return }
         let fret = old.midi - Self.tuning[string - 1]
-        guard (0...Self.frets).contains(fret) else { return }
+        guard (0...Self.frets).contains(fret), let score, let selection else { return }
+        // A chord can already hold a note on the target string at this slot.
+        guard !score.measures[selection.measure].notes.contains(where: { $0.slot == selection.slot && $0.note.string == string }) else { return }
         var notes = tabNotes
         notes[index] = TabNote(start: old.start, end: old.end, midi: old.midi, string: string, fret: fret)
         commit(notes)
-        selection?.string = string
+        self.selection?.string = string
     }
 
     func undoEdit() {
         guard let previous = history.popLast() else { return }
+        pendingDigit = nil
         tabNotes = previous
         save()
     }
 
     private func commit(_ notes: [TabNote]) {
+        guard !transcribing else { return }
         history.append(tabNotes)
         if history.count > 200 { history.removeFirst() }
         tabNotes = notes.sorted { $0.start < $1.start }
@@ -117,8 +131,10 @@ extension AppModel {
         do {
             let data = try JSONEncoder().encode(File(tuning: Self.tuning, notes: tabNotes, edited: true))
             try data.write(to: folder.appendingPathComponent("tab.json"), options: .atomic)
+            hasTab = true
+            tabError = nil
         } catch {
-            tabError = "Could not save the tab: \(error.localizedDescription)"
+            tabError = "Could not save the tab, so the latest edits exist only until the song is closed: \(error.localizedDescription)"
         }
     }
 }

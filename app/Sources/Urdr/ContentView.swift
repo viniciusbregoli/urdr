@@ -132,6 +132,9 @@ struct ContentView: View {
         if model.transcribing {
             ProgressView("Transcribing guitar").controlSize(.small)
         } else if let score = model.score {
+            if let error = model.tabError {
+                Text(error).foregroundStyle(.red).textSelection(.enabled)
+            }
             ScoreView(score: score, position: player.position, selection: model.editing ? model.selection : nil,
                       seek: { player.seek(to: $0) },
                       select: model.editing ? { model.selection = $0 } : nil)
