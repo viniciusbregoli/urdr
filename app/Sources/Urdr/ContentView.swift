@@ -232,7 +232,12 @@ struct ContentView: View {
             }
         } else if let score = model.score {
             if let error = model.tabError {
-                Text(error).foregroundStyle(.red).textSelection(.enabled)
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.failure)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.top, 12)
             }
             ScoreView(score: score, position: player.position, selection: model.editing ? model.selection : nil,
                       seek: { player.seek(to: $0) },
