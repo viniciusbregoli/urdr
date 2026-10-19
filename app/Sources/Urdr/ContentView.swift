@@ -34,6 +34,12 @@ struct ContentView: View {
         .focused($rootFocused)
         .focusEffectDisabled()
         .onAppear { rootFocused = true }
+        // `Urdr <song>` opens a song straight from the terminal.
+        .task {
+            if let path = CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") }) {
+                await model.open(URL(fileURLWithPath: path))
+            }
+        }
         .onKeyPress(phases: .down) { press in
             guard !showPalette, !showHelp else { return .ignored }
             if press.key == .escape { return .ignored }
