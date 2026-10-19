@@ -80,13 +80,15 @@ pub fn chip_width(ui: &Ui, text: &str) -> f32 {
 pub fn pill(ui: &mut Ui, label: &str, key: &str, active: bool) -> Response {
     let label_w = text_width(ui, label, font(14.0));
     let key_w = chip_width(ui, key);
-    let size = Vec2::new(label_w + key_w + if key.is_empty() { 24.0 } else { 32.0 }, 30.0);
+    let pad = if key.is_empty() || label.is_empty() { 24.0 } else { 32.0 };
+    let size = Vec2::new(label_w + key_w + pad, 30.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     let (fill, color) = if active { (WHITE, Color32::BLACK) } else if response.hovered() { (Color32::from_rgb(44, 48, 54), TEXT) } else { (RAISED, TEXT) };
     ui.painter().rect_filled(rect, 8.0, fill);
     ui.painter().text(Pos2::new(rect.left() + 12.0, rect.center().y), Align2::LEFT_CENTER, label, font(14.0), color);
     if !key.is_empty() {
-        let at = Pos2::new(rect.left() + 20.0 + label_w, rect.center().y);
+        // A chip-only button (compact top bar) centres the chip.
+        let at = Pos2::new(if label.is_empty() { rect.left() + 12.0 } else { rect.left() + 20.0 + label_w }, rect.center().y);
         if active {
             let r = Rect::from_min_size(at - Vec2::new(0.0, 9.0), Vec2::new(key_w, 18.0));
             ui.painter().rect_filled(r, 4.0, Color32::from_black_alpha(30));
@@ -104,6 +106,21 @@ pub fn square(ui: &mut Ui, rect: Rect, id: egui::Id, label: &str, fill: Color32,
     let fill = if response.hovered() && fill == RAISED { Color32::from_rgb(44, 48, 54) } else { fill };
     ui.painter().rect_filled(rect, radius, fill);
     ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, bold(13.0), color);
+    response
+}
+
+// Icon-only skip button for the compact transport: two triangles pointing the way it jumps.
+pub fn skip_button(ui: &mut Ui, rect: Rect, id: egui::Id, forward: bool) -> Response {
+    let response = ui.interact(rect, id, Sense::click());
+    ui.painter().rect_filled(rect, 8.0, if response.hovered() { Color32::from_rgb(44, 48, 54) } else { RAISED });
+    let c = rect.center();
+    let dir = if forward { 1.0 } else { -1.0 };
+    for dx in [-4.0, 4.0] {
+        let tip = c + Vec2::new(dx + dir * 4.0, 0.0);
+        let back = c + Vec2::new(dx - dir * 4.0, 0.0);
+        let points = vec![tip, back + Vec2::new(0.0, -5.0), back + Vec2::new(0.0, 5.0)];
+        ui.painter().add(Shape::convex_polygon(points, TEXT, Stroke::NONE));
+    }
     response
 }
 

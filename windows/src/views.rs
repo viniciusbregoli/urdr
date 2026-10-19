@@ -7,6 +7,13 @@ use eframe::egui::{self, Align, Align2, Color32, Id, Layout, Pos2, Rect, Sense, 
 const HEADER_W: f32 = 248.0;
 const CHORD_H: f32 = 40.0;
 const GAP: f32 = 6.0;
+// The full transport and top bar need about 1280 pt; below that they switch to the compact layout, which
+// needs about 990 pt (main.rs sets the window minimum from it).
+const COMPACT_BELOW: f32 = 1300.0;
+
+fn compact(ctx: &egui::Context) -> bool {
+    ctx.screen_rect().width() < COMPACT_BELOW
+}
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -54,31 +61,40 @@ impl eframe::App for App {
 
 impl App {
     // Title and BPM leading, the Mixer/Tab switch in the centre, open, palette and shortcuts trailing.
+    // Below the compact breakpoint the trailing buttons use short labels and the title truncates.
     fn top_bar(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
         let rect = ui.max_rect();
-        ui.horizontal_centered(|ui| {
-            ui.label(egui::RichText::new(self.title.as_deref().unwrap_or("Urdr")).font(bold(15.0)).color(TEXT));
-            if let Some(a) = self.tab.analysis.as_ref().filter(|_| self.ready()) {
-                ui.add_space(8.0);
-                ui.label(egui::RichText::new(format!("{} BPM", a.bpm.round())).font(mono(12.0)).color(SECONDARY));
-            }
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if pill(ui, "Shortcuts", "?", self.help).clicked() {
-                    actions.push(Action::Help);
-                }
-                if pill(ui, "Commands", "Ctrl+K", false).clicked() {
-                    actions.push(Action::Palette);
-                }
-                if pill(ui, "Open folder", "Shift+O", false).clicked() {
-                    actions.push(Action::OpenFolder);
-                }
-                if pill(ui, "Open audio", "O", false).clicked() {
-                    actions.push(Action::OpenAudio);
-                }
+        let compact = compact(ui.ctx());
+        let switch = Rect::from_center_size(rect.center(), Vec2::new(176.0, 30.0));
+        let leading = Rect::from_min_max(rect.min, Pos2::new(switch.left() - 12.0, rect.bottom()));
+        ui.scope_builder(UiBuilder::new().max_rect(leading).layout(Layout::left_to_right(Align::Center)), |ui| {
+            let bpm = self.tab.analysis.as_ref().filter(|_| self.ready()).map(|a| format!("{} BPM", a.bpm.round()));
+            let bpm_w = bpm.as_deref().map_or(0.0, |b| text_width(ui, b, mono(12.0)) + 10.0);
+            let title_w = (leading.width() - bpm_w).max(40.0);
+            ui.allocate_ui(Vec2::new(title_w, 30.0), |ui| {
+                ui.add(egui::Label::new(egui::RichText::new(self.title.as_deref().unwrap_or("Urdr")).font(bold(15.0)).color(TEXT)).truncate());
             });
+            if let Some(bpm) = bpm {
+                ui.label(egui::RichText::new(bpm).font(mono(12.0)).color(SECONDARY));
+            }
+        });
+        let trailing = Rect::from_min_max(Pos2::new(switch.right() + 12.0, rect.top()), rect.max);
+        ui.scope_builder(UiBuilder::new().max_rect(trailing).layout(Layout::right_to_left(Align::Center)), |ui| {
+            let (help, palette, folder, audio) = if compact { ("", "", "Folder", "Audio") } else { ("Shortcuts", "Commands", "Open folder", "Open audio") };
+            if pill(ui, help, "?", self.help).on_hover_text("Show shortcuts (?)").clicked() {
+                actions.push(Action::Help);
+            }
+            if pill(ui, palette, "Ctrl+K", false).on_hover_text("Command palette (Ctrl+K)").clicked() {
+                actions.push(Action::Palette);
+            }
+            if pill(ui, folder, "Shift+O", false).on_hover_text("Open song folder (Shift+O)").clicked() {
+                actions.push(Action::OpenFolder);
+            }
+            if pill(ui, audio, "O", false).on_hover_text("Open audio file (O)").clicked() {
+                actions.push(Action::OpenAudio);
+            }
         });
         if self.ready() {
-            let switch = Rect::from_center_size(rect.center(), Vec2::new(176.0, 30.0));
             ui.scope_builder(UiBuilder::new().max_rect(switch).layout(Layout::left_to_right(Align::Center)), |ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 if pill(ui, "Mixer", "", self.view == View::Mixer).clicked() && self.view != View::Mixer {
@@ -301,7 +317,7 @@ impl App {
             let p = self.player.lock().unwrap();
             (p.position(), p.synth_on, p.tone_name())
         };
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(egui::RichText::new("Guitar tab").font(bold(18.0)).color(TEXT));
             ui.add_space(12.0);
             if self.tab.score.is_some() && pill(ui, if self.tab.editing { "Editing" } else { "Edit" }, "E", self.tab.editing).clicked() {
@@ -376,21 +392,14 @@ impl App {
         }
     }
 
-    // Three columns: chord left, play on the window's centre line, practice controls right.
+    // Three columns: chord left, play on the window's centre line, practice controls right. Below the compact
+    // breakpoint the captions and skip labels go (tooltips keep the keys) and the controls narrow.
     fn transport(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
         let rect = ui.max_rect();
+        let compact = compact(ui.ctx());
         let center = Pos2::new(ui.ctx().screen_rect().center().x, rect.center().y);
         let p = self.player.lock().unwrap();
         let position = p.position();
-
-        // Current and next chord.
-        if let Some(a) = &self.tab.analysis {
-            let current = a.chord_index(position).map(|i| a.chords[i].name()).unwrap_or_else(|| "-".into());
-            ui.painter().text(Pos2::new(rect.left(), rect.center().y - 9.0), Align2::LEFT_CENTER, &current, bold(34.0), TEXT);
-            if let Some(next) = a.next_chord(position) {
-                ui.painter().text(Pos2::new(rect.left(), rect.center().y + 22.0), Align2::LEFT_CENTER, format!("then {}", next.name()), font(13.0), SECONDARY);
-            }
-        }
 
         // Play centred, skips beside it, time to the left.
         let play = Rect::from_center_size(center, Vec2::splat(50.0));
@@ -400,78 +409,115 @@ impl App {
             }
         });
         ui.painter().text(play.center_top() - Vec2::new(0.0, 2.0), Align2::CENTER_BOTTOM, "Space", chip_font(), white(70));
-        let before = Rect::from_min_max(Pos2::new(center.x - 260.0, rect.top()), Pos2::new(play.left() - 10.0, rect.bottom()));
-        ui.scope_builder(UiBuilder::new().max_rect(before).layout(Layout::right_to_left(Align::Center)), |ui| {
-            if pill(ui, "-5s", "Left", false).clicked() {
+        let time = format!("{} / {}", format_time(position), format_time(p.duration()));
+        let time_w = text_width(ui, &time, mono(12.0));
+        let back_rect;
+        if compact {
+            let back = Rect::from_center_size(Pos2::new(play.left() - 25.0, center.y), Vec2::splat(30.0));
+            let forward = Rect::from_center_size(Pos2::new(play.right() + 25.0, center.y), Vec2::splat(30.0));
+            if skip_button(ui, back, Id::new("back"), false).on_hover_text("Back 5 seconds (Left)").clicked() {
                 actions.push(Action::Skip(-5));
             }
-            ui.add_space(6.0);
-            ui.label(egui::RichText::new(format!("{} / {}", format_time(position), format_time(p.duration()))).font(mono(12.0)).color(SECONDARY));
-        });
-        let after = Rect::from_min_max(Pos2::new(play.right() + 10.0, rect.top()), Pos2::new(center.x + 200.0, rect.bottom()));
-        ui.scope_builder(UiBuilder::new().max_rect(after).layout(Layout::left_to_right(Align::Center)), |ui| {
-            if pill(ui, "+5s", "Right", false).clicked() {
+            if skip_button(ui, forward, Id::new("forward"), true).on_hover_text("Forward 5 seconds (Right)").clicked() {
                 actions.push(Action::Skip(5));
             }
-        });
+            back_rect = back;
+        } else {
+            let before = Rect::from_min_max(Pos2::new(center.x - 260.0, rect.top()), Pos2::new(play.left() - 10.0, rect.bottom()));
+            let response = ui.scope_builder(UiBuilder::new().max_rect(before).layout(Layout::right_to_left(Align::Center)), |ui| {
+                pill(ui, "-5s", "Left", false).on_hover_text("Back 5 seconds (Left)")
+            });
+            if response.inner.clicked() {
+                actions.push(Action::Skip(-5));
+            }
+            back_rect = response.inner.rect;
+            let after = Rect::from_min_max(Pos2::new(play.right() + 10.0, rect.top()), Pos2::new(center.x + 200.0, rect.bottom()));
+            ui.scope_builder(UiBuilder::new().max_rect(after).layout(Layout::left_to_right(Align::Center)), |ui| {
+                if pill(ui, "+5s", "Right", false).on_hover_text("Forward 5 seconds (Right)").clicked() {
+                    actions.push(Action::Skip(5));
+                }
+            });
+        }
+        let time_right = back_rect.left() - 12.0;
+        ui.painter().text(Pos2::new(time_right, center.y), Align2::RIGHT_CENTER, &time, mono(12.0), SECONDARY);
 
-        // Steppers and toggles on the right, each with a caption carrying its keys.
+        // Current and next chord, clipped so a long name never runs under the time.
+        if let Some(a) = &self.tab.analysis {
+            let column = ui.painter().with_clip_rect(Rect::from_min_max(rect.min, Pos2::new(time_right - time_w - 12.0, rect.bottom())));
+            let current = a.chord_index(position).map(|i| a.chords[i].name()).unwrap_or_else(|| "-".into());
+            column.text(Pos2::new(rect.left(), rect.center().y - 9.0), Align2::LEFT_CENTER, &current, bold(if compact { 28.0 } else { 34.0 }), TEXT);
+            if let Some(next) = a.next_chord(position) {
+                column.text(Pos2::new(rect.left(), rect.center().y + 22.0), Align2::LEFT_CENTER, format!("then {}", next.name()), font(13.0), SECONDARY);
+            }
+        }
+
+        // Steppers and toggles on the right; full width shows a caption with the keys above each group.
+        let gap = if compact { 8.0 } else { 12.0 };
         let mut x = rect.right();
         let group = |ui: &mut Ui, x: &mut f32, caption: &str, keys: &str, width: f32, body: &mut dyn FnMut(&mut Ui, Rect)| {
             let r = Rect::from_min_max(Pos2::new(*x - width, rect.top() + 12.0), Pos2::new(*x, rect.bottom() - 12.0));
-            ui.painter().text(r.left_top(), Align2::LEFT_TOP, caption, bold(11.0), SECONDARY);
-            let cw = text_width(ui, caption, bold(11.0));
-            ui.painter().text(r.left_top() + Vec2::new(cw + 6.0, 0.0), Align2::LEFT_TOP, keys, chip_font(), white(90));
-            body(ui, Rect::from_min_max(Pos2::new(r.left(), r.top() + 18.0), r.max));
-            *x -= width + 12.0;
+            if compact {
+                body(ui, Rect::from_min_max(Pos2::new(r.left(), center.y - 15.0), Pos2::new(r.right(), center.y + 15.0)));
+            } else {
+                ui.painter().text(r.left_top(), Align2::LEFT_TOP, caption, bold(11.0), SECONDARY);
+                let cw = text_width(ui, caption, bold(11.0));
+                ui.painter().text(r.left_top() + Vec2::new(cw + 6.0, 0.0), Align2::LEFT_TOP, keys, chip_font(), white(90));
+                body(ui, Rect::from_min_max(Pos2::new(r.left(), r.top() + 18.0), r.max));
+            }
+            *x -= width + gap;
         };
-        let tone = p.tone_name();
+        let tone = if compact && p.tone_name() == "Overdriven" { "Drive" } else { p.tone_name() };
         let synth_on = p.synth_on;
         let has_tab = !self.tab.notes.is_empty();
-        group(ui, &mut x, "Guitar", "Y U", 150.0, &mut |ui, r| {
-            let a = Rect::from_min_size(r.min, Vec2::new(56.0, 30.0));
-            let b = Rect::from_min_size(r.min + Vec2::new(62.0, 0.0), Vec2::new(88.0, 30.0));
+        let (synth_w, tone_w) = if compact { (50.0, 64.0) } else { (56.0, 88.0) };
+        group(ui, &mut x, "Guitar", "Y U", synth_w + 6.0 + tone_w, &mut |ui, r| {
+            let a = Rect::from_min_size(r.min, Vec2::new(synth_w, 30.0));
+            let b = Rect::from_min_size(r.min + Vec2::new(synth_w + 6.0, 0.0), Vec2::new(tone_w, 30.0));
             let (f, c) = if synth_on { (WHITE, Color32::BLACK) } else { (RAISED, if has_tab { TEXT } else { SECONDARY }) };
-            if square(ui, a, Id::new("synth"), if synth_on { "Synth" } else { "Orig" }, f, c, 8.0).clicked() {
+            if square(ui, a, Id::new("synth"), if synth_on { "Synth" } else { "Orig" }, f, c, 8.0).on_hover_text("Synth guitar (Y)").clicked() {
                 actions.push(Action::ToggleSynth);
             }
-            if square(ui, b, Id::new("tone"), tone, RAISED, TEXT, 8.0).clicked() {
+            if square(ui, b, Id::new("tone"), tone, RAISED, TEXT, 8.0).on_hover_text("Next synth tone (U)").clicked() {
                 actions.push(Action::NextTone);
             }
         });
         let loop_text = match (p.loop_start, p.loop_end) {
+            (Some(a), Some(b)) if compact => format!("{}-{}", format_time(a), format_time(b)),
             (Some(a), Some(b)) => format!("{} - {}", format_time(a), format_time(b)),
             (Some(a), None) => format!("{} - ...", format_time(a)),
-            _ => "Off".into(),
+            _ => if compact { "Loop".into() } else { "Off".into() },
         };
         let loop_on = p.loop_on;
-        group(ui, &mut x, "Loop", "[ ] L \\", 112.0, &mut |ui, r| {
-            let a = Rect::from_min_size(r.min, Vec2::new(112.0, 30.0));
+        let loop_w = if compact { 84.0 } else { 112.0 };
+        group(ui, &mut x, "Loop", "[ ] L \\", loop_w, &mut |ui, r| {
+            let a = Rect::from_min_size(r.min, Vec2::new(loop_w, 30.0));
             let (f, c) = if loop_on { (MINT, Color32::BLACK) } else { (RAISED, TEXT) };
-            if square(ui, a, Id::new("loop"), &loop_text, f, c, 8.0).clicked() {
+            if square(ui, a, Id::new("loop"), &loop_text, f, c, 8.0).on_hover_text("Toggle loop (L), set start [ and end ], clear \\").clicked() {
                 actions.push(Action::ToggleLoop);
             }
         });
-        let stepper = |ui: &mut Ui, r: Rect, id: &str, value: String, minus: Action, plus: Action, actions: &mut Vec<Action>| {
-            let a = Rect::from_min_size(r.min, Vec2::new(26.0, 30.0));
-            let b = Rect::from_min_size(r.min + Vec2::new(66.0, 0.0), Vec2::new(26.0, 30.0));
-            if square(ui, a, Id::new((id, "-")), "-", RAISED, TEXT, 8.0).clicked() {
-                actions.push(minus);
+        let (button, value_w) = if compact { (24.0, 38.0) } else { (26.0, 40.0) };
+        let stepper_w = button * 2.0 + value_w;
+        let stepper = |ui: &mut Ui, r: Rect, id: &str, value: String, minus: (Action, &str), plus: (Action, &str), actions: &mut Vec<Action>| {
+            let a = Rect::from_min_size(r.min, Vec2::new(button, 30.0));
+            let b = Rect::from_min_size(r.min + Vec2::new(button + value_w, 0.0), Vec2::new(button, 30.0));
+            if square(ui, a, Id::new((id, "-")), "-", RAISED, TEXT, 8.0).on_hover_text(minus.1).clicked() {
+                actions.push(minus.0);
             }
-            ui.painter().text(Pos2::new(r.left() + 46.0, a.center().y), Align2::CENTER_CENTER, value, mono(13.0), TEXT);
-            if square(ui, b, Id::new((id, "+")), "+", RAISED, TEXT, 8.0).clicked() {
-                actions.push(plus);
+            ui.painter().text(Pos2::new(r.left() + button + value_w / 2.0, a.center().y), Align2::CENTER_CENTER, value, mono(13.0), TEXT);
+            if square(ui, b, Id::new((id, "+")), "+", RAISED, TEXT, 8.0).on_hover_text(plus.1).clicked() {
+                actions.push(plus.0);
             }
         };
         let semitones = p.semitones;
         let speed = (p.rate * 100.0).round() as i32;
         drop(p);
-        group(ui, &mut x, "Pitch", "- = 0", 92.0, &mut |ui, r| {
+        group(ui, &mut x, "Pitch", "- = 0", stepper_w, &mut |ui, r| {
             let value = if semitones > 0 { format!("+{semitones}") } else { semitones.to_string() };
-            stepper(ui, r, "pitch", value, Action::Pitch(-1), Action::Pitch(1), actions);
+            stepper(ui, r, "pitch", value, (Action::Pitch(-1), "Pitch down (-), reset (0)"), (Action::Pitch(1), "Pitch up (=)"), actions);
         });
-        group(ui, &mut x, "Speed", ", . /", 92.0, &mut |ui, r| {
-            stepper(ui, r, "speed", format!("{speed}%"), Action::Speed(-1), Action::Speed(1), actions);
+        group(ui, &mut x, "Speed", ", . /", stepper_w, &mut |ui, r| {
+            stepper(ui, r, "speed", format!("{speed}%"), (Action::Speed(-1), "Slower (,), reset (/)"), (Action::Speed(1), "Faster (.)"), actions);
         });
     }
 
