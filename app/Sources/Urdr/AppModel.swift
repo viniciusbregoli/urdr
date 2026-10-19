@@ -22,6 +22,9 @@ final class AppModel {
     private(set) var tabNotes: [TabNote] = []
     private(set) var transcribing = false
     private(set) var tabError: String?
+    private(set) var analysis: Analysis?
+    private(set) var analyzing = false
+    private(set) var analysisError: String?
     let player = StemPlayer()
     private var folder: URL?
 
@@ -47,6 +50,10 @@ final class AppModel {
             tabNotes = Self.loadTab(folder.appendingPathComponent("tab.json"))
             tabError = nil
             state = .ready(title: audio.deletingPathExtension().lastPathComponent)
+            analysis = Analysis.load(folder.appendingPathComponent("analysis.json"))
+            analysisError = nil
+            analyzing = false
+            if analysis == nil { await analyze(audio, into: folder) }
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -64,6 +71,21 @@ final class AppModel {
         } catch {
             tabError = error.localizedDescription
         }
+    }
+
+    // Runs on the full mix while the stems play; a result for a song that is no longer open is dropped.
+    private func analyze(_ audio: URL, into folder: URL) async {
+        let out = folder.appendingPathComponent("analysis.json")
+        analyzing = true
+        do {
+            try await Engine.analyze(audio: audio, out: out)
+            guard self.folder == folder else { return }
+            analysis = Analysis.load(out)
+        } catch {
+            guard self.folder == folder else { return }
+            analysisError = error.localizedDescription
+        }
+        analyzing = false
     }
 
     nonisolated static func loadTab(_ url: URL) -> [TabNote] {
