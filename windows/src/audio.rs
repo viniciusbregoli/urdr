@@ -153,11 +153,23 @@ impl Player {
 
     pub fn set_loop_start(&mut self) {
         self.loop_start = Some(self.position());
+        self.order_loop();
     }
 
     pub fn set_loop_end(&mut self) {
         self.loop_end = Some(self.position());
         self.loop_on = self.loop_start.is_some();
+        self.order_loop();
+    }
+
+    // Marking the end before the start swaps them, so a loop always runs from start to end.
+    fn order_loop(&mut self) {
+        if let (Some(a), Some(b)) = (self.loop_start, self.loop_end) {
+            if a > b {
+                self.loop_start = Some(b);
+                self.loop_end = Some(a);
+            }
+        }
     }
 
     pub fn set_loop(&mut self, a: f64, b: f64) {
@@ -466,6 +478,21 @@ mod tests {
         }
         assert!(wrapped);
         assert!(p.playing);
+    }
+
+    #[test]
+    fn loop_ends_marked_backwards_are_put_in_order() {
+        let mut p = player(vec![("other".into(), sine(220.0, 4.0, 44100))], 44100, 44100);
+        p.seek(3.0);
+        p.set_loop_start();
+        p.seek(1.0);
+        p.set_loop_end();
+        assert_eq!((p.loop_start, p.loop_end), (Some(1.0), Some(3.0)));
+        assert!(p.loop_on);
+        // Moving the start past the end swaps them again.
+        p.seek(3.5);
+        p.set_loop_start();
+        assert_eq!((p.loop_start, p.loop_end), (Some(3.0), Some(3.5)));
     }
 
     #[test]
