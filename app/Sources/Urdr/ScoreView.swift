@@ -76,7 +76,7 @@ struct ScoreView: View {
         context.draw(Text("\(measure.number)").font(.caption2).foregroundStyle(.secondary),
                      at: CGPoint(x: left + 3, y: staffTop - 26), anchor: .leading)
         if measure.number == 1 {
-            for (row, digit) in ["\(measure.beatCount)", "4"].enumerated() {
+            for (row, digit) in ["\(score.beatsPerBar)", "4"].enumerated() {
                 context.draw(Text(digit).font(.system(size: 26, weight: .bold, design: .serif)),
                              at: CGPoint(x: left + 16, y: y(2) + Double(row) * lineGap * 2.5))
             }

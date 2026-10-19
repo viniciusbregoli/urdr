@@ -39,6 +39,12 @@ struct Score: Equatable {
 
     let measures: [Measure]
 
+    // The most common bar length, so a pickup bar does not set the time signature.
+    var beatsPerBar: Int {
+        let counts = Dictionary(grouping: measures.map(\.beatCount), by: { $0 }).mapValues(\.count)
+        return counts.max { ($0.value, $1.key) < ($1.value, $0.key) }?.key ?? 4
+    }
+
     init(notes: [AppModel.TabNote], analysis: Analysis, duration: Double) {
         let beatLength = analysis.bpm > 0 ? 60 / analysis.bpm : 0.5
         var bounds = analysis.downbeats

@@ -81,5 +81,12 @@ final class UrdrTests: XCTestCase {
         XCTAssertEqual(measure.beatPosition(at: 2.75), 1.5, accuracy: 1e-9)
         XCTAssertEqual(measure.time(atBeat: 1.5), 2.75, accuracy: 1e-9)
         XCTAssertEqual(score.measureIndex(at: 3.9), 1)
+
+        // A one-beat pickup before the first downbeat must not become the time signature.
+        let pickup = Score(notes: [note(0.1, 0.4), note(0.6, 0.9)],
+                           analysis: Analysis(bpm: 120, beats: [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5], downbeats: [0.5, 2.5], chords: []),
+                           duration: 4.5)
+        XCTAssertEqual(pickup.measures.first?.number, 1)
+        XCTAssertEqual(pickup.beatsPerBar, 4)
     }
 }
