@@ -118,6 +118,8 @@ extension AppModel {
 
     private func commit(_ notes: [TabNote]) {
         guard !transcribing else { return }
+        // Any edit ends a two-digit entry; typeDigit sets the pending digit again after its own commit.
+        pendingDigit = nil
         history.append(tabNotes)
         if history.count > 200 { history.removeFirst() }
         tabNotes = notes.sorted { $0.start < $1.start }

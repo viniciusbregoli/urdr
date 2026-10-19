@@ -97,11 +97,14 @@ final class AppModel {
                 try FileManager.default.copyItem(at: out, to: backup)
             }
             try await Engine.tab(audio: folder.appendingPathComponent("stems/guitar.wav"), out: out)
+            // The file is already in its own song folder; only the state of a song that is still open changes.
+            guard self.folder == folder else { return }
             tabNotes = Self.loadTab(out)
             hasTab = true
             tabEdited = false
             history = []
         } catch {
+            guard self.folder == folder else { return }
             tabError = error.localizedDescription
         }
     }

@@ -80,6 +80,13 @@ final class TabEditorTests: XCTestCase {
         model.undoEdit()
         model.typeDigit(2, at: now.addingTimeInterval(0.3))
         XCTAssertEqual(model.selectedNote?.fret, 2)
+
+        // A deletion between the digits ends the entry too: without it, 1, Delete, 2 would make fret 12.
+        let later = now.addingTimeInterval(10)
+        model.typeDigit(1, at: later)
+        model.deleteSelectedNote()
+        model.typeDigit(2, at: later.addingTimeInterval(0.3))
+        XCTAssertEqual(model.selectedNote?.fret, 2)
     }
 
     func testStringMoveRefusesToLandOnAChordNote() throws {
