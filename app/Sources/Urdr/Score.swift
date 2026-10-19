@@ -76,7 +76,8 @@ struct Score: Equatable {
         let offsets = measures.reduce(into: [0]) { $0.append($0.last! + $1.beatCount * 4) }
         let indices = placed.map { offsets[$0.1.measure] + Int($0.1.slot * 4) }
         for (i, (note, where_)) in placed.enumerated() {
-            let gap = i + 1 < indices.count ? indices[i + 1] - indices[i] : 4
+            // Notes sharing a slot (a double-stop) measure to the next distinct onset, not to each other.
+            let gap = indices[(i + 1)...].first { $0 > indices[i] }.map { $0 - indices[i] } ?? 4
             let own = Int((note.end - note.start) / beatLength * 4 + 0.5)
             measures[where_.measure].notes.append(Note(note: note, slot: where_.slot, sixteenths: max(1, min(gap, max(own, 1), 16))))
         }

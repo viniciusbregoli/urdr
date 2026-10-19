@@ -88,5 +88,10 @@ final class UrdrTests: XCTestCase {
                            duration: 4.5)
         XCTAssertEqual(pickup.measures.first?.number, 1)
         XCTAssertEqual(pickup.beatsPerBar, 4)
+
+        // A double-stop on beat 1 followed by a note on beat 2 is two quarter notes, not sixteenths.
+        let doubleStop = Score(notes: [note(0, 0.5), AppModel.TabNote(start: 0, end: 0.5, midi: 64, string: 2, fret: 5), note(0.5, 1)],
+                               analysis: analysis, duration: 4)
+        XCTAssertEqual(doubleStop.measures[0].notes.map(\.sixteenths), [4, 4, 4])
     }
 }

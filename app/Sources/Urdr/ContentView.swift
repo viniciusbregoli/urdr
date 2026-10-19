@@ -36,7 +36,8 @@ struct ContentView: View {
         .onAppear { rootFocused = true }
         // `Urdr <song>` opens a song straight from the terminal.
         .task {
-            if let path = CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") }) {
+            // Requiring an existing file skips the values of AppKit flags such as `-AppleLanguages (en)`.
+            if let path = CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") && FileManager.default.fileExists(atPath: $0) }) {
                 await model.open(URL(fileURLWithPath: path))
             }
         }
