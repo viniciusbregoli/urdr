@@ -66,7 +66,7 @@ def regular_downbeats(beats: list[float], downbeats: list[float], beats_per_bar:
     if len(downbeats) < 2 or len(beats) < 2 * beats_per_bar:
         return downbeats
     counts = [sum(1 for b in beats if start - 0.02 <= b < end - 0.02) for start, end in zip(downbeats, downbeats[1:])]
-    if np.median(counts) >= 3:
+    if np.mean(counts) >= 3:
         return downbeats
     first = int(np.argmin([abs(b - downbeats[0]) for b in beats]))
     return beats[first::beats_per_bar]
@@ -115,14 +115,18 @@ if __name__ == "__main__":
     # C major with borrowed chords: bVII and bIII are Bb and Eb, never A# and D#.
     borrowed = [c["label"] for c in spell_chords(seq("C", "F", "G", "A#", "C", "D#", "G", "C"))]
     assert borrowed == ["C", "F", "G", "Bb", "C", "Eb", "G", "C"], borrowed
-    # A minor: the leading-tone G# stays sharp, the Neapolitan bII is Bb.
-    minor = [c["label"] for c in spell_chords(seq("A:min", "G#", "A:min", "D:min", "E", "A:min", "A#", "A:min"))]
-    assert minor == ["A:min", "G#", "A:min", "D:min", "E", "A:min", "Bb", "A:min"], minor
+    # A minor: C major scores highest (8 against 7 for F and G), Am outlasts C, so the key is A minor.
+    # The leading-tone G# stays sharp and the Neapolitan bII is Bb.
+    minor = [c["label"] for c in spell_chords(seq("A:min", "C", "A:min", "D:min", "A:min", "C", "G#", "A:min", "A#",
+                                                  "E:min", "E:min"))]
+    assert minor == ["A:min", "C", "A:min", "D:min", "A:min", "C", "G#", "A:min", "Bb", "E:min", "E:min"], minor
     assert spell_chords([]) == []
 
     # Drumless clip: the tracker marks a downbeat every 1-2 beats, so bars are rebuilt every 4 beats.
     beats = [i * 0.5 for i in range(16)]
     assert regular_downbeats(beats, [0.0, 0.5, 1.5, 2.0, 3.0, 3.5]) == [0.0, 2.0, 4.0, 6.0]
+    # The decision uses the average bar: [1, 3, 3] averages 2.3 beats, so it is rebuilt even though the median is 3.
+    assert regular_downbeats(beats, [0.0, 0.5, 2.0, 3.5]) == [0.0, 2.0, 4.0, 6.0]
     # A plausible 4/4 grid is kept as it is.
     assert regular_downbeats(beats, [0.0, 2.0, 4.0, 6.0]) == [0.0, 2.0, 4.0, 6.0]
     print("ok")
