@@ -153,24 +153,23 @@ impl Player {
 
     pub fn set_loop_start(&mut self) {
         self.loop_start = Some(self.position());
-        // Whichever end is marked second turns the loop on.
-        self.loop_on = self.loop_end.is_some();
         self.order_loop();
     }
 
     pub fn set_loop_end(&mut self) {
         self.loop_end = Some(self.position());
-        self.loop_on = self.loop_start.is_some();
         self.order_loop();
     }
 
-    // Marking the end before the start swaps them, so a loop always runs from start to end.
+    // Marking the end before the start swaps them, so a loop always runs from start to end. Whichever end is
+    // marked second turns the loop on, unless both sit at the same spot, which render could never wrap.
     fn order_loop(&mut self) {
         if let (Some(a), Some(b)) = (self.loop_start, self.loop_end) {
-            if a > b {
-                self.loop_start = Some(b);
-                self.loop_end = Some(a);
-            }
+            self.loop_start = Some(a.min(b));
+            self.loop_end = Some(a.max(b));
+            self.loop_on = a != b;
+        } else {
+            self.loop_on = false;
         }
     }
 
@@ -507,6 +506,19 @@ mod tests {
         p.set_loop_start();
         assert!(p.loop_on);
         assert_eq!((p.loop_start, p.loop_end), (Some(1.0), Some(2.0)));
+    }
+
+    #[test]
+    fn zero_length_loop_stays_off() {
+        let mut p = player(vec![("other".into(), sine(220.0, 4.0, 44100))], 44100, 44100);
+        p.seek(2.0);
+        p.set_loop_start();
+        p.set_loop_end();
+        assert!(!p.loop_on, "start and end at the same spot never wrap");
+        p.seek(3.0);
+        p.set_loop_end();
+        assert!(p.loop_on);
+        assert_eq!((p.loop_start, p.loop_end), (Some(2.0), Some(3.0)));
     }
 
     #[test]
