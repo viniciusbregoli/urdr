@@ -29,7 +29,13 @@ final class AppModel {
     private(set) var waveforms: [String: [Float]] = [:]
     private(set) var transcribing = false
     var tabError: String?
-    var analysis: Analysis? { didSet { rebuildScore() } }
+    var analysis: Analysis? {
+        didSet {
+            rebuildScore()
+            chordSheet = analysis.map { ChordSheet(analysis: $0, duration: player.duration) }
+        }
+    }
+    private(set) var chordSheet: ChordSheet?
     private(set) var analyzing = false
     private(set) var analysisError: String?
     let player = StemPlayer()

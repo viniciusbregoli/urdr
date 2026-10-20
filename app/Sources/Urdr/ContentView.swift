@@ -10,7 +10,7 @@ struct Command: Identifiable {
 }
 
 struct ContentView: View {
-    enum Pane: String { case mixer = "Mixer", tab = "Tab" }
+    enum Pane: String, CaseIterable { case mixer = "Mixer", chords = "Chords", tab = "Tab" }
 
     @State private var model = AppModel()
     @State private var pane = Pane.mixer
@@ -30,7 +30,12 @@ struct ContentView: View {
                     case .idle: idle
                     case .separating(let fraction): separating(fraction)
                     case .failed(let message): failed(message)
-                    case .ready: pane == .mixer ? AnyView(mixer) : AnyView(tabPane)
+                    case .ready:
+                        switch pane {
+                        case .mixer: AnyView(mixer)
+                        case .chords: AnyView(chordsPane)
+                        case .tab: AnyView(tabPane)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -79,7 +84,7 @@ struct ContentView: View {
         }
         // Edit keys only make sense on the score, so leaving the tab view (V or the switch) ends editing.
         .onChange(of: pane) { _, newPane in
-            if newPane == .mixer, model.editing { model.toggleEditing() }
+            if newPane != .tab, model.editing { model.toggleEditing() }
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.audio]) { result in
             if case .success(let url) = result { open(url) }
@@ -124,12 +129,11 @@ struct ContentView: View {
             if case .ready = model.state {
                 HStack(spacing: 8) {
                     Picker("View", selection: $pane) {
-                        Text("Mixer").tag(Pane.mixer)
-                        Text("Tab").tag(Pane.tab)
+                        ForEach(Pane.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 150)
+                    .frame(width: 220)
                     .help("Switch view (V)")
                     KeyChip("V")
                 }
@@ -201,6 +205,19 @@ struct ContentView: View {
                   chordPlaceholder: model.analyzing ? "Finding chords and beats"
                       : model.analysisError.map { "Chord analysis failed: \($0)" } ?? "")
             .padding(16)
+    }
+
+    @ViewBuilder private var chordsPane: some View {
+        if let analysis = model.analysis, let sheet = model.chordSheet {
+            ChordsPane(analysis: analysis, sheet: sheet, position: player.position) { player.seek(to: $0) }
+        } else {
+            VStack(spacing: 10) {
+                if model.analyzing { ProgressView().controlSize(.small) }
+                Text(model.analyzing ? "Finding chords and beats" : model.analysisError.map { "Chord analysis failed: \($0)" } ?? "No chord analysis yet")
+                    .font(.system(size: 14)).foregroundStyle(model.analysisError == nil ? Theme.secondary : Theme.failure)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     private var tabPane: some View {
@@ -316,7 +333,10 @@ struct ContentView: View {
             Command(title: "Pitch down", hint: "-", key: KeyEquivalent("-")) { player.semitones = max(-12, player.semitones - 1) },
             Command(title: "Pitch up", hint: "=", key: KeyEquivalent("=")) { player.semitones = min(12, player.semitones + 1) },
             Command(title: "Reset pitch", hint: "0", key: KeyEquivalent("0")) { player.semitones = 0 },
-            Command(title: pane == .mixer ? "Show the tab" : "Show the mixer", hint: "V", key: KeyEquivalent("v")) { pane = pane == .mixer ? .tab : .mixer },
+            Command(title: "Next view (Mixer, Chords, Tab)", hint: "V", key: KeyEquivalent("v")) {
+                pane = Pane.allCases[(Pane.allCases.firstIndex(of: pane)! + 1) % Pane.allCases.count]
+            },
+            Command(title: "Show the chords", hint: "", key: nil) { pane = .chords },
             Command(title: "Generate guitar tab", hint: "T", key: KeyEquivalent("t")) { generateTab() },
             Command(title: player.synthOn ? "Original guitar" : "Synth guitar", hint: "Y", key: KeyEquivalent("y")) { player.toggleSynth() },
             Command(title: "Next synth tone", hint: "U", key: KeyEquivalent("u")) { player.cycleTone() },
