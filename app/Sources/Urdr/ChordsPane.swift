@@ -45,7 +45,8 @@ struct ChordsPane: View {
                 }
                 .padding(2)
             }
-            .onChange(of: current.map { $0 / columns }) { _, row in
+            // initial: switching to this view mid-song starts on the current row, not at bar 1.
+            .onChange(of: current.map { $0 / columns }, initial: true) { _, row in
                 guard let row, sheet.bars.indices.contains(row * columns) else { return }
                 withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(sheet.bars[row * columns].number, anchor: .center) }
             }
