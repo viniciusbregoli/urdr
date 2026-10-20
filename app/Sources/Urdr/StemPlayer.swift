@@ -112,15 +112,21 @@ final class StemPlayer {
         seek(to: (isPlaying ? currentPosition() : position) + seconds)
     }
 
-    // Whichever end is marked second completes the loop and turns it on.
+    // Whichever end is marked second completes the loop and turns it on, if it has any length to play.
     func setLoopStart() {
         (loopStart, loopEnd) = Self.ordered(currentPosition(), loopEnd)
-        if loopEnd != nil { loopOn = true }
+        loopOn = Self.hasLength(loopStart, loopEnd)
     }
 
     func setLoopEnd() {
         (loopStart, loopEnd) = Self.ordered(loopStart, currentPosition())
-        loopOn = loopStart != nil
+        loopOn = Self.hasLength(loopStart, loopEnd)
+    }
+
+    // tick only wraps when start < end, so a zero-length pair must not show as an active loop.
+    nonisolated static func hasLength(_ start: Double?, _ end: Double?) -> Bool {
+        guard let start, let end else { return false }
+        return start < end
     }
 
     // Marking the ends in either order still gives a playable loop.
