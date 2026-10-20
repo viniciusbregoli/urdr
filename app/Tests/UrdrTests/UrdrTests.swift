@@ -100,4 +100,32 @@ final class UrdrTests: XCTestCase {
                              duration: 3)
         XCTAssertEqual(drifting.measures[0].notes.map(\.sixteenths), [4])
     }
+
+    func testLoopEndsAreOrdered() {
+        XCTAssertTrue(StemPlayer.ordered(8, 3) == (3, 8))
+        XCTAssertTrue(StemPlayer.ordered(3, 8) == (3, 8))
+        XCTAssertTrue(StemPlayer.ordered(nil, 5) == (nil, 5))
+        XCTAssertTrue(StemPlayer.ordered(5, nil) == (5, nil))
+    }
+
+    @MainActor
+    func testMarkingTheStartAfterTheEndTurnsTheLoopOn() {
+        let player = StemPlayer()
+        player.loopEnd = 5
+        player.setLoopStart()
+        XCTAssertEqual(player.loopStart, 0)
+        XCTAssertEqual(player.loopEnd, 5)
+        XCTAssertTrue(player.loopOn)
+    }
+
+    // The original bug: `]` pressed at a point before the loop start.
+    @MainActor
+    func testMarkingTheEndBeforeTheStartOrdersAndTurnsTheLoopOn() {
+        let player = StemPlayer()
+        player.loopStart = 5
+        player.setLoopEnd()
+        XCTAssertEqual(player.loopStart, 0)
+        XCTAssertEqual(player.loopEnd, 5)
+        XCTAssertTrue(player.loopOn)
+    }
 }
