@@ -117,4 +117,15 @@ final class UrdrTests: XCTestCase {
         XCTAssertEqual(player.loopEnd, 5)
         XCTAssertTrue(player.loopOn)
     }
+
+    // The original bug: `]` pressed at a point before the loop start.
+    @MainActor
+    func testMarkingTheEndBeforeTheStartOrdersAndTurnsTheLoopOn() {
+        let player = StemPlayer()
+        player.loopStart = 5
+        player.setLoopEnd()
+        XCTAssertEqual(player.loopStart, 0)
+        XCTAssertEqual(player.loopEnd, 5)
+        XCTAssertTrue(player.loopOn)
+    }
 }
