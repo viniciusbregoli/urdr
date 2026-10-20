@@ -1,0 +1,33 @@
+name: Windows app
+
+on:
+  pull_request:
+    paths: ["windows/**", ".github/workflows/windows.yml"]
+  push:
+    branches: [main]
+    paths: ["windows/**", ".github/workflows/windows.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # A cold build is most of this job's time, so the registry and target dir are cached.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows
+      - name: Test the Windows app
+        working-directory: windows
+        run: cargo test
+      - name: Build the Windows app
+        working-directory: windows
+        run: cargo build --release

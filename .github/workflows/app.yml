@@ -1,0 +1,26 @@
+name: Mac app
+
+on:
+  pull_request:
+    paths: ["app/**", ".github/workflows/app.yml"]
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/app.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and test the app
+        working-directory: app
+        run: swift test
