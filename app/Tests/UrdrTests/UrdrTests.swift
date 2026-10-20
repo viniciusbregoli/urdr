@@ -118,6 +118,19 @@ final class UrdrTests: XCTestCase {
         XCTAssertTrue(player.loopOn)
     }
 
+    @MainActor
+    func testZeroLengthLoopStaysOff() {
+        let player = StemPlayer()
+        // Both ends marked at the same moment (0 s here, nothing is playing).
+        player.setLoopStart()
+        player.setLoopEnd()
+        XCTAssertEqual(player.loopStart, 0)
+        XCTAssertEqual(player.loopEnd, 0)
+        XCTAssertFalse(player.loopOn)
+        XCTAssertFalse(StemPlayer.hasLength(nil, 5))
+        XCTAssertTrue(StemPlayer.hasLength(0, 5))
+    }
+
     // The original bug: `]` pressed at a point before the loop start.
     @MainActor
     func testMarkingTheEndBeforeTheStartOrdersAndTurnsTheLoopOn() {
