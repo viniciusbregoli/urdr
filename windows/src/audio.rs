@@ -174,9 +174,9 @@ impl Player {
     }
 
     pub fn set_loop(&mut self, a: f64, b: f64) {
-        self.loop_start = Some(a.min(b));
-        self.loop_end = Some(a.max(b));
-        self.loop_on = true;
+        self.loop_start = Some(a);
+        self.loop_end = Some(b);
+        self.order_loop();
     }
 
     pub fn clear_loop(&mut self) {
@@ -519,6 +519,16 @@ mod tests {
         p.set_loop_end();
         assert!(p.loop_on);
         assert_eq!((p.loop_start, p.loop_end), (Some(2.0), Some(3.0)));
+    }
+
+    #[test]
+    fn dragged_loop_is_ordered_and_needs_a_span() {
+        let mut p = player(vec![("other".into(), sine(220.0, 4.0, 44100))], 44100, 44100);
+        p.set_loop(2.0, 2.0);
+        assert!(!p.loop_on, "a zero-length drag is not a loop");
+        p.set_loop(3.0, 1.0);
+        assert!(p.loop_on);
+        assert_eq!((p.loop_start, p.loop_end), (Some(1.0), Some(3.0)));
     }
 
     #[test]
