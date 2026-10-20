@@ -1,28 +1,20 @@
-name: CI
+name: Engine
 
 on:
   pull_request:
+    paths: ["engine/**", ".github/workflows/engine.yml"]
   push:
     branches: [main]
+    paths: ["engine/**", ".github/workflows/engine.yml"]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: engine-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  app:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Build and test the app
-        working-directory: app
-        run: swift test
-
   engine:
     runs-on: ubuntu-latest
     steps:
@@ -40,16 +32,3 @@ jobs:
       - name: Analysis self-check
         working-directory: engine
         run: uv run --no-project --python 3.12 --with "numpy<2" python analysis.py
-
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Test the Windows app
-        working-directory: windows
-        run: cargo test
-      - name: Build the Windows app
-        working-directory: windows
-        run: cargo build --release
